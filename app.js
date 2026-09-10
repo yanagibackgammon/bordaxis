@@ -20,6 +20,7 @@
   };
 
   const board = document.getElementById('board');
+  const boardWrap = document.querySelector('.board-wrap');
   const ctx = board.getContext('2d');
   const dpr = Math.max(1, window.devicePixelRatio || 1);
 
@@ -43,6 +44,11 @@
   let territoryCache = null;
   let computerTimer = null;
   let computerPlan = null;
+
+  let fieldZoom = 1;
+  let pinchStartDistance = 0;
+  let pinchStartZoom = 1;
+  let suppressBoardTap = false;
 
   function initialState() {
     return {
@@ -80,6 +86,9 @@
     }
     computerPlan = null;
     territoryCache = null;
+    fieldZoom = 1;
+    board.style.transform = 'scale(1)';
+    board.style.transformOrigin = '50% 50%';
     state = initialState();
     state.turnStartPieces = clonePieces(state.players.A.pieces);
     ui.winnerOverlay.classList.add('hidden');
@@ -87,7 +96,7 @@
   }
 
   function resizeCanvas() {
-    const rect = board.getBoundingClientRect();
+    const rect = boardWrap.getBoundingClientRect();
     const cssSize = Math.max(300, Math.floor(Math.min(rect.width, rect.height || rect.width)));
     board.width = Math.round(cssSize * dpr);
     board.height = Math.round(cssSize * dpr);
@@ -127,8 +136,14 @@
     drawSegments('B');
     drawCurrentLine();
     drawMoveHints();
-    drawPieces('A');
-    drawPieces('B');
+
+    if (state.current === 'A') {
+      drawPieces('B');
+      drawPieces('A');
+    } else {
+      drawPieces('A');
+      drawPieces('B');
+    }
   }
 
   function isPerimeterPoint(p) {
@@ -291,8 +306,8 @@
 
   function boardPointFromEvent(ev) {
     const rect = board.getBoundingClientRect();
-    const xPx = ev.clientX - rect.left;
-    const yPx = ev.clientY - rect.top;
+    const xPx = (ev.clientX - rect.left) * (view.size / rect.width);
+    const yPx = (ev.clientY - rect.top) * (view.size / rect.height);
     const gx = Math.round((xPx - view.pad) / view.cell);
     const gy = Math.round(GRID - (yPx - view.pad) / view.cell);
     if (gx < 0 || gx > GRID || gy < 0 || gy > GRID) return null;
@@ -303,6 +318,7 @@
   }
 
   function handleBoardPointer(ev) {
+    if (suppressBoardTap) return;
     if (state.gameOver || state.current === COMPUTER_PLAYER || state.movesUsed >= MOVES_PER_TURN) return;
     const q = boardPointFromEvent(ev);
     if (!q) return;
@@ -880,7 +896,7 @@
           target.data[dst] = rgb.r;
           target.data[dst + 1] = rgb.g;
           target.data[dst + 2] = rgb.b;
-          target.data[dst + 3] = 58;
+          target.data[dst + 3] = 100;
         }
 
         if (owner === 'A') areaPixelsA += componentBoardPixels.length;
@@ -949,7 +965,62 @@
     drawBoard();
   }
 
-  board.addEventListener('pointerdown', handleBoardPointer);
+  function touchDistance(t0, t1) {
+    return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+  }
+
+  function clampFieldZoom(value) {
+    return Math.max(1, Math.min(2.6, value));
+  }
+
+  function setFieldZoomOrigin(t0, t1) {
+    const rect = boardWrap.getBoundingClientRect();
+    const midX = (t0.clientX + t1.clientX) / 2;
+    const midY = (t0.clientY + t1.clientY) / 2;
+    const xPct = Math.max(0, Math.min(100, ((midX - rect.left) / rect.width) * 100));
+    const yPct = Math.max(0, Math.min(100, ((midY - rect.top) / rect.height) * 100));
+    board.style.transformOrigin = `${xPct}% ${yPct}%`;
+  }
+
+  boardWrap.addEventListener('touchstart', ev => {
+    if (ev.touches.length !== 2) return;
+    ev.preventDefault();
+    suppressBoardTap = true;
+    pinchStartDistance = Math.max(1, touchDistance(ev.touches[0], ev.touches[1]));
+    pinchStartZoom = fieldZoom;
+    setFieldZoomOrigin(ev.touches[0], ev.touches[1]);
+  }, { passive: false });
+
+  boardWrap.addEventListener('touchmove', ev => {
+    if (ev.touches.length !== 2 || pinchStartDistance <= 0) return;
+    ev.preventDefault();
+    const distance = touchDistance(ev.touches[0], ev.touches[1]);
+    fieldZoom = clampFieldZoom(pinchStartZoom * distance / pinchStartDistance);
+    board.style.transform = `scale(${fieldZoom})`;
+  }, { passive: false });
+
+  boardWrap.addEventListener('touchend', ev => {
+    if (ev.touches.length < 2) {
+      pinchStartDistance = 0;
+      if (fieldZoom <= 1.01) {
+        fieldZoom = 1;
+        board.style.transform = 'scale(1)';
+        board.style.transformOrigin = '50% 50%';
+      }
+      setTimeout(() => {
+        suppressBoardTap = false;
+      }, 140);
+    }
+  }, { passive: false });
+
+  boardWrap.addEventListener('touchcancel', () => {
+    pinchStartDistance = 0;
+    setTimeout(() => {
+      suppressBoardTap = false;
+    }, 140);
+  }, { passive: false });
+
+  board.addEventListener('pointerup', handleBoardPointer);
   ui.undoBtn.addEventListener('click', undoMove);
   ui.endTurnBtn.addEventListener('click', endTurn);
   ui.resetBtn.addEventListener('click', resetGame);
