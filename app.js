@@ -4,12 +4,12 @@
   const GRID = 10;
   const POINTS = GRID + 1;
   const MOVES_PER_TURN = 3;
-  const MAX_ROUNDS = 50; // 仮仕様: 各プレイヤー50ターン
-  const ALLOW_DIAGONAL = true;
+  const MAX_ROUNDS = 50; // 50ラウンド = 各プレイヤー50ターン = 合計100ターン
+  const ALLOW_DIAGONAL = false;
 
   const COLORS = {
-    A: '#37a8ff',
-    B: '#ff5d72',
+    A: '#ff5d72',
+    B: '#37a8ff',
     grid: '#344052',
     gridStrong: '#526176',
     pieceStroke: '#f7fbff',
@@ -55,13 +55,13 @@
       gameOver: false,
       players: {
         A: {
-          pieces: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
-          segments: [{ a: { x: 0, y: 0 }, b: { x: 10, y: 10 }, initial: true }],
+          pieces: [{ x: 0, y: 10 }, { x: 10, y: 0 }],
+          segments: [{ a: { x: 0, y: 10 }, b: { x: 10, y: 0 }, initial: true }],
           score: 0
         },
         B: {
-          pieces: [{ x: 0, y: 10 }, { x: 10, y: 0 }],
-          segments: [{ a: { x: 0, y: 10 }, b: { x: 10, y: 0 }, initial: true }],
+          pieces: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+          segments: [{ a: { x: 0, y: 0 }, b: { x: 10, y: 10 }, initial: true }],
           score: 0
         }
       },
