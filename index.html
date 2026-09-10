@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>LINE TERRITORY - Prototype</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">2 PLAYER STRATEGY GAME / PROTOTYPE</div>
+        <h1>LINE TERRITORY</h1>
+      </div>
+      <button id="resetBtn" class="ghost danger">最初から</button>
+    </header>
+
+    <section class="scoreboard">
+      <article id="panelA" class="player-card player-a active">
+        <div class="player-label"><span class="dot"></span>PLAYER A</div>
+        <div class="score"><span id="scoreA">0.00</span><small> pt²</small></div>
+        <div id="turnsA" class="turn-meta">0 / 50 turns</div>
+      </article>
+
+      <div class="center-status">
+        <div id="roundLabel" class="round">ROUND 1 / 50</div>
+        <div id="turnLabel" class="turn-label">PLAYER A のターン</div>
+        <div class="moves"><span id="movesLeft">3</span> MOVE LEFT</div>
+      </div>
+
+      <article id="panelB" class="player-card player-b">
+        <div class="player-label"><span class="dot"></span>PLAYER B</div>
+        <div class="score"><span id="scoreB">0.00</span><small> pt²</small></div>
+        <div id="turnsB" class="turn-meta">0 / 50 turns</div>
+      </article>
+    </section>
+
+    <section class="game-layout">
+      <div class="board-wrap">
+        <canvas id="board" width="760" height="760" aria-label="ゲーム盤"></canvas>
+        <div id="winnerOverlay" class="winner-overlay hidden">
+          <div class="winner-card">
+            <div class="eyebrow">GAME OVER</div>
+            <h2 id="winnerTitle">PLAYER A WIN</h2>
+            <p id="winnerScore"></p>
+            <button id="againBtn" class="primary">もう一度</button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side-panel">
+        <section class="rule-card">
+          <h2>この試作版の仮ルール</h2>
+          <ol>
+            <li>盤面は10×10、格子点は11×11。</li>
+            <li>各プレイヤーは2駒。AとBは対角線上に初期配置。</li>
+            <li>1 MOVEで、選択した駒を隣接する格子点へ1つ移動。斜め移動も可。</li>
+            <li>1ターンに必ず3 MOVE。1駒だけを3回動かしてもよい。</li>
+            <li>3 MOVE後に「ターン終了」で、その時点の2駒を結ぶ線を確定。</li>
+            <li>自分の確定線だけで完全に囲まれた領域の総面積が得点。</li>
+            <li>全50ラウンド＝各プレイヤー50ターンで終了。</li>
+          </ol>
+        </section>
+
+        <section class="controls-card">
+          <h2>操作</h2>
+          <p id="instruction">動かしたいPLAYER Aの駒を選んでください。</p>
+          <div class="button-row">
+            <button id="undoBtn" class="ghost" disabled>1手戻す</button>
+            <button id="endTurnBtn" class="primary" disabled>ターン終了</button>
+          </div>
+          <div class="legend">
+            <div><span class="legend-line a"></span>Aの確定線</div>
+            <div><span class="legend-line b"></span>Bの確定線</div>
+            <div><span class="legend-line current"></span>現在の線</div>
+          </div>
+        </section>
+
+        <section class="log-card">
+          <div class="log-head">
+            <h2>履歴</h2>
+            <button id="clearSelectionBtn" class="text-btn">選択解除</button>
+          </div>
+          <div id="history" class="history"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
