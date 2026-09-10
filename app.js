@@ -39,7 +39,9 @@
     againBtn: document.getElementById('againBtn'),
     winnerOverlay: document.getElementById('winnerOverlay'),
     winnerTitle: document.getElementById('winnerTitle'),
-    winnerScore: document.getElementById('winnerScore')
+    helpBtn: document.getElementById('helpBtn'),
+    rulesModal: document.getElementById('rulesModal'),
+    rulesCloseBtn: document.getElementById('rulesCloseBtn')
   };
 
   let view = { size: 760, pad: 56, cell: 64.8 };
@@ -1032,53 +1034,46 @@
     return null;
   }
 
-  // Entire page stays fixed on SP. Only this field consumes touch gestures.
-  function allTouchesInsideField(touches) {
-    if (!touches || touches.length === 0) return false;
-
-    for (const touch of touches) {
-      const el = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (!el || !el.closest('.board-wrap')) return false;
-    }
-    return true;
-  }
-
-  // Safari/iOS can still perform page zoom even with user-scalable=no.
-  // Block every multi-touch gesture unless ALL fingers are inside the square field.
+  // The browser itself must never zoom the page.
+  // Even inside the field, zooming is handled only by our CSS-transform logic below.
+  // preventDefault() here does not stop propagation, so the field still receives
+  // the same touch events and can run the custom pinch/pan implementation.
   document.addEventListener('touchstart', ev => {
-    if (ev.touches.length >= 2 && !allTouchesInsideField(ev.touches)) {
+    if (ev.touches.length >= 2) {
       ev.preventDefault();
     }
   }, { passive: false, capture: true });
 
   document.addEventListener('touchmove', ev => {
-    if (ev.touches.length >= 2 && !allTouchesInsideField(ev.touches)) {
+    if (ev.touches.length >= 2) {
       ev.preventDefault();
     }
   }, { passive: false, capture: true });
 
-  // Safari-specific gesture events.
+  // iOS Safari also exposes gesture events for native page magnification.
+  // Always cancel them; BORDAXIS field zoom is independent of browser zoom.
   for (const eventName of ['gesturestart', 'gesturechange', 'gestureend']) {
     document.addEventListener(eventName, ev => {
-      const target = ev.target instanceof Element ? ev.target : null;
-      if (!target || !target.closest('.board-wrap')) {
-        ev.preventDefault();
-      }
+      ev.preventDefault();
     }, { passive: false, capture: true });
   }
 
-  // Prevent native double-tap zoom on mobile. Field zoom is handled only
-  // by the custom pinch implementation below.
+  // Block native double-tap zoom everywhere on touch devices.
   let lastTouchEndAt = 0;
   document.addEventListener('touchend', ev => {
     if (ev.changedTouches.length !== 1) return;
-
     const now = Date.now();
-    if (now - lastTouchEndAt < 320) {
+    if (now - lastTouchEndAt < 350) {
       ev.preventDefault();
     }
     lastTouchEndAt = now;
-  }, { passive: false });
+  }, { passive: false, capture: true });
+
+  document.addEventListener('dblclick', ev => {
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      ev.preventDefault();
+    }
+  }, { passive: false, capture: true });
 
   boardWrap.addEventListener('touchstart', ev => {
     if (ev.touches.length === 2) {
@@ -1202,9 +1197,34 @@
   board.addEventListener('pointerup', handleBoardPointer);
   ui.undoBtn.addEventListener('click', undoMove);
   ui.endTurnBtn.addEventListener('click', endTurn);
+  function openRulesModal() {
+    ui.rulesModal.classList.remove('hidden');
+  }
+
+  function closeRulesModal() {
+    ui.rulesModal.classList.add('hidden');
+  }
+
+  ui.helpBtn.addEventListener('click', openRulesModal);
+  ui.rulesCloseBtn.addEventListener('click', closeRulesModal);
+  ui.rulesModal.addEventListener('click', ev => {
+    if (ev.target === ui.rulesModal) closeRulesModal();
+  });
+
   ui.resetBtn.addEventListener('click', resetGame);
   ui.againBtn.addEventListener('click', resetGame);
   window.addEventListener('resize', resizeCanvas);
+
+  if (window.visualViewport) {
+    const stabilizePageViewport = () => {
+      // The page itself is fixed; keep its viewport origin anchored.
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+    window.visualViewport.addEventListener('resize', stabilizePageViewport);
+    window.visualViewport.addEventListener('scroll', stabilizePageViewport);
+  }
 
   resetGame();
   requestAnimationFrame(resizeCanvas);
