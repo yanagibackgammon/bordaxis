@@ -46,8 +46,18 @@
   let computerPlan = null;
 
   let fieldZoom = 1;
+  let fieldPanX = 0;
+  let fieldPanY = 0;
   let pinchStartDistance = 0;
   let pinchStartZoom = 1;
+  let pinchStartPanX = 0;
+  let pinchStartPanY = 0;
+  let panTouchId = null;
+  let panStartX = 0;
+  let panStartY = 0;
+  let panStartFieldX = 0;
+  let panStartFieldY = 0;
+  let panMoved = false;
   let suppressBoardTap = false;
 
   function initialState() {
@@ -87,8 +97,10 @@
     computerPlan = null;
     territoryCache = null;
     fieldZoom = 1;
-    board.style.transform = 'scale(1)';
-    board.style.transformOrigin = '50% 50%';
+    fieldPanX = 0;
+    fieldPanY = 0;
+    board.style.transform = 'translate(0px, 0px) scale(1)';
+    board.style.transformOrigin = '0 0';
     state = initialState();
     state.turnStartPieces = clonePieces(state.players.A.pieces);
     ui.winnerOverlay.classList.add('hidden');
@@ -386,11 +398,16 @@
   }
 
   function undoMove() {
-    if (!state.undoStack.length || state.gameOver || state.current === COMPUTER_PLAYER) return;
-    const last = state.undoStack.pop();
-    state.players[state.current].pieces = clonePieces(last.pieces);
-    state.movesUsed = last.movesUsed;
-    state.selectedPiece = last.selectedPiece;
+    if (
+      state.gameOver ||
+      state.current === COMPUTER_PLAYER ||
+      state.movesUsed === 0
+    ) return;
+
+    state.players[state.current].pieces = clonePieces(state.turnStartPieces);
+    state.movesUsed = 0;
+    state.selectedPiece = null;
+    state.undoStack = [];
     render();
   }
 
@@ -956,7 +973,7 @@
     ui.panelA.classList.toggle('active', !state.gameOver && player === 'A');
     ui.panelB.classList.toggle('active', !state.gameOver && player === 'B');
     ui.roundLabel.textContent = `${Math.min(state.round, MAX_ROUNDS)}`;
-    ui.undoBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || !state.undoStack.length;
+    ui.undoBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || state.movesUsed === 0;
     ui.endTurnBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || state.movesUsed !== MOVES_PER_TURN;
   }
 
@@ -970,53 +987,164 @@
   }
 
   function clampFieldZoom(value) {
-    return Math.max(1, Math.min(2.6, value));
+    return Math.max(1, Math.min(2.8, value));
   }
 
-  function setFieldZoomOrigin(t0, t1) {
+  function clampFieldPan() {
     const rect = boardWrap.getBoundingClientRect();
-    const midX = (t0.clientX + t1.clientX) / 2;
-    const midY = (t0.clientY + t1.clientY) / 2;
-    const xPct = Math.max(0, Math.min(100, ((midX - rect.left) / rect.width) * 100));
-    const yPct = Math.max(0, Math.min(100, ((midY - rect.top) / rect.height) * 100));
-    board.style.transformOrigin = `${xPct}% ${yPct}%`;
+    const w = rect.width;
+    const h = rect.height;
+    const minX = Math.min(0, w - w * fieldZoom);
+    const minY = Math.min(0, h - h * fieldZoom);
+
+    fieldPanX = Math.max(minX, Math.min(0, fieldPanX));
+    fieldPanY = Math.max(minY, Math.min(0, fieldPanY));
   }
+
+  function applyFieldTransform() {
+    clampFieldPan();
+    board.style.transformOrigin = '0 0';
+    board.style.transform =
+      `translate(${fieldPanX}px, ${fieldPanY}px) scale(${fieldZoom})`;
+  }
+
+  function touchById(touches, id) {
+    for (const touch of touches) {
+      if (touch.identifier === id) return touch;
+    }
+    return null;
+  }
+
+  // Entire page stays fixed on SP. Only this field consumes touch gestures.
+  // Prevent native double-tap zoom on mobile. Field zoom is handled only
+  // by the custom pinch implementation below.
+  let lastTouchEndAt = 0;
+  document.addEventListener('touchend', ev => {
+    if (ev.changedTouches.length !== 1) return;
+
+    const now = Date.now();
+    if (now - lastTouchEndAt < 320) {
+      ev.preventDefault();
+    }
+    lastTouchEndAt = now;
+  }, { passive: false });
 
   boardWrap.addEventListener('touchstart', ev => {
-    if (ev.touches.length !== 2) return;
-    ev.preventDefault();
-    suppressBoardTap = true;
-    pinchStartDistance = Math.max(1, touchDistance(ev.touches[0], ev.touches[1]));
-    pinchStartZoom = fieldZoom;
-    setFieldZoomOrigin(ev.touches[0], ev.touches[1]);
+    if (ev.touches.length === 2) {
+      ev.preventDefault();
+      suppressBoardTap = true;
+      panTouchId = null;
+
+      const t0 = ev.touches[0];
+      const t1 = ev.touches[1];
+      const rect = boardWrap.getBoundingClientRect();
+      const midX = (t0.clientX + t1.clientX) / 2 - rect.left;
+      const midY = (t0.clientY + t1.clientY) / 2 - rect.top;
+
+      pinchStartDistance = Math.max(1, touchDistance(t0, t1));
+      pinchStartZoom = fieldZoom;
+      pinchStartPanX = fieldPanX;
+      pinchStartPanY = fieldPanY;
+
+      // Keep the midpoint under the fingers while zooming.
+      boardWrap.dataset.pinchMidX = String(midX);
+      boardWrap.dataset.pinchMidY = String(midY);
+      return;
+    }
+
+    if (ev.touches.length === 1 && fieldZoom > 1.001) {
+      ev.preventDefault();
+      const t = ev.touches[0];
+      panTouchId = t.identifier;
+      panStartX = t.clientX;
+      panStartY = t.clientY;
+      panStartFieldX = fieldPanX;
+      panStartFieldY = fieldPanY;
+      panMoved = false;
+    }
   }, { passive: false });
 
   boardWrap.addEventListener('touchmove', ev => {
-    if (ev.touches.length !== 2 || pinchStartDistance <= 0) return;
-    ev.preventDefault();
-    const distance = touchDistance(ev.touches[0], ev.touches[1]);
-    fieldZoom = clampFieldZoom(pinchStartZoom * distance / pinchStartDistance);
-    board.style.transform = `scale(${fieldZoom})`;
+    if (ev.touches.length === 2 && pinchStartDistance > 0) {
+      ev.preventDefault();
+      suppressBoardTap = true;
+
+      const t0 = ev.touches[0];
+      const t1 = ev.touches[1];
+      const distance = touchDistance(t0, t1);
+      const newZoom = clampFieldZoom(
+        pinchStartZoom * distance / pinchStartDistance
+      );
+
+      const midX = Number(boardWrap.dataset.pinchMidX || 0);
+      const midY = Number(boardWrap.dataset.pinchMidY || 0);
+
+      const contentX = (midX - pinchStartPanX) / pinchStartZoom;
+      const contentY = (midY - pinchStartPanY) / pinchStartZoom;
+
+      fieldZoom = newZoom;
+      fieldPanX = midX - contentX * fieldZoom;
+      fieldPanY = midY - contentY * fieldZoom;
+      applyFieldTransform();
+      return;
+    }
+
+    if (ev.touches.length === 1 && fieldZoom > 1.001 && panTouchId != null) {
+      const t = touchById(ev.touches, panTouchId);
+      if (!t) return;
+
+      ev.preventDefault();
+      const dx = t.clientX - panStartX;
+      const dy = t.clientY - panStartY;
+
+      if (Math.hypot(dx, dy) > 4) {
+        panMoved = true;
+        suppressBoardTap = true;
+      }
+
+      fieldPanX = panStartFieldX + dx;
+      fieldPanY = panStartFieldY + dy;
+      applyFieldTransform();
+    }
   }, { passive: false });
 
   boardWrap.addEventListener('touchend', ev => {
     if (ev.touches.length < 2) {
       pinchStartDistance = 0;
+    }
+
+    if (ev.touches.length === 0) {
+      panTouchId = null;
+
       if (fieldZoom <= 1.01) {
         fieldZoom = 1;
-        board.style.transform = 'scale(1)';
-        board.style.transformOrigin = '50% 50%';
+        fieldPanX = 0;
+        fieldPanY = 0;
+        applyFieldTransform();
       }
+
+      const delay = panMoved ? 180 : 120;
       setTimeout(() => {
         suppressBoardTap = false;
-      }, 140);
+        panMoved = false;
+      }, delay);
+    } else if (ev.touches.length === 1 && fieldZoom > 1.001) {
+      const t = ev.touches[0];
+      panTouchId = t.identifier;
+      panStartX = t.clientX;
+      panStartY = t.clientY;
+      panStartFieldX = fieldPanX;
+      panStartFieldY = fieldPanY;
+      panMoved = false;
     }
   }, { passive: false });
 
   boardWrap.addEventListener('touchcancel', () => {
     pinchStartDistance = 0;
+    panTouchId = null;
     setTimeout(() => {
       suppressBoardTap = false;
+      panMoved = false;
     }, 140);
   }, { passive: false });
 
