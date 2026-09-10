@@ -20,7 +20,8 @@
       </article>
 
       <div class="center-status">
-        <div id="roundLabel" class="round">ROUND 1 / 50</div>
+        <div class="round-word">ROUND</div>
+        <div id="roundLabel" class="round-value">1 / 50</div>
       </div>
 
       <article id="panelB" class="player-card player-b">
@@ -28,6 +29,11 @@
         <div class="score"><span id="scoreB">0.00</span><small> pt²</small></div>
       </article>
     </section>
+
+    <div class="move-buttons">
+      <button id="endTurnBtn" class="primary" disabled>ムーブ確定</button>
+      <button id="undoBtn" class="ghost" disabled>1手戻す</button>
+    </div>
 
     <section class="game-area">
       <div class="board-wrap">
@@ -42,10 +48,6 @@
         </div>
       </div>
 
-      <div class="move-buttons">
-        <button id="endTurnBtn" class="primary" disabled>ムーブ確定</button>
-        <button id="undoBtn" class="ghost" disabled>1手戻す</button>
-      </div>
     </section>
   </main>
 

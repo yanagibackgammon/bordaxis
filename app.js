@@ -904,7 +904,7 @@
     ui.scoreB.textContent = state.players.B.score.toFixed(2);
     ui.panelA.classList.toggle('active', !state.gameOver && player === 'A');
     ui.panelB.classList.toggle('active', !state.gameOver && player === 'B');
-    ui.roundLabel.textContent = `ROUND ${Math.min(state.round, MAX_ROUNDS)} / ${MAX_ROUNDS}`;
+    ui.roundLabel.textContent = `${Math.min(state.round, MAX_ROUNDS)} / ${MAX_ROUNDS}`;
     ui.undoBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || !state.undoStack.length;
     ui.endTurnBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || state.movesUsed !== MOVES_PER_TURN;
   }
