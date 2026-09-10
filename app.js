@@ -5,6 +5,8 @@
   const POINTS = GRID + 1;
   const MOVES_PER_TURN = 3;
   const MAX_ROUNDS = 50; // 50ラウンド = 各プレイヤー50ターン = 合計100ターン
+  const COMPUTER_PLAYER = 'B';
+  const COMPUTER_MOVE_DELAY = 420;
 
   const COLORS = {
     A: '#ff5d72',
@@ -46,6 +48,7 @@
   let view = { size: 760, pad: 56, cell: 64.8 };
   let state;
   let territoryCache = { A: null, B: null };
+  let computerTimer = null;
 
   function initialState() {
     return {
@@ -78,6 +81,10 @@
   }
 
   function resetGame() {
+    if (computerTimer) {
+      clearTimeout(computerTimer);
+      computerTimer = null;
+    }
     territoryCache = { A: null, B: null };
     state = initialState();
     state.turnStartPieces = clonePieces(state.players.A.pieces);
@@ -277,7 +284,7 @@
   }
 
   function handleBoardPointer(ev) {
-    if (state.gameOver || state.movesUsed >= MOVES_PER_TURN) return;
+    if (state.gameOver || state.current === COMPUTER_PLAYER || state.movesUsed >= MOVES_PER_TURN) return;
     const q = boardPointFromEvent(ev);
     if (!q) return;
 
@@ -309,7 +316,7 @@
   }
 
   function undoMove() {
-    if (!state.undoStack.length || state.gameOver) return;
+    if (!state.undoStack.length || state.gameOver || state.current === COMPUTER_PLAYER) return;
     const last = state.undoStack.pop();
     state.players[state.current].pieces = clonePieces(last.pieces);
     state.movesUsed = last.movesUsed;
@@ -352,6 +359,62 @@
     state.undoStack = [];
     state.turnStartPieces = clonePieces(state.players[state.current].pieces);
     render();
+    scheduleComputerTurn();
+  }
+
+  function scheduleComputerTurn() {
+    if (computerTimer) {
+      clearTimeout(computerTimer);
+      computerTimer = null;
+    }
+    if (!state || state.gameOver || state.current !== COMPUTER_PLAYER) return;
+    computerTimer = setTimeout(computerStep, COMPUTER_MOVE_DELAY);
+  }
+
+  function computerStep() {
+    computerTimer = null;
+    if (!state || state.gameOver || state.current !== COMPUTER_PLAYER) return;
+
+    if (state.movesUsed >= MOVES_PER_TURN) {
+      endTurn();
+      return;
+    }
+
+    const choices = [];
+    for (let pieceIndex = 0; pieceIndex < state.players.B.pieces.length; pieceIndex++) {
+      for (const target of legalTargets(pieceIndex)) {
+        choices.push({ pieceIndex, target });
+      }
+    }
+
+    if (!choices.length) {
+      // Normally unreachable on the perimeter, but avoid locking the game.
+      state.movesUsed = MOVES_PER_TURN;
+      render();
+      computerTimer = setTimeout(() => endTurn(), COMPUTER_MOVE_DELAY);
+      return;
+    }
+
+    const choice = choices[Math.floor(Math.random() * choices.length)];
+    const own = state.players.B.pieces;
+    state.selectedPiece = choice.pieceIndex;
+    state.undoStack.push({
+      pieces: clonePieces(own),
+      movesUsed: state.movesUsed,
+      selectedPiece: state.selectedPiece
+    });
+    own[choice.pieceIndex] = { ...choice.target };
+    state.movesUsed += 1;
+
+    if (state.movesUsed >= MOVES_PER_TURN) {
+      state.selectedPiece = null;
+    }
+    render();
+
+    computerTimer = setTimeout(() => {
+      if (state.movesUsed >= MOVES_PER_TURN) endTurn();
+      else computerStep();
+    }, COMPUTER_MOVE_DELAY);
   }
 
   // Rasterize only that player's confirmed line network onto an expanded plane.
@@ -522,19 +585,21 @@
     ui.panelA.classList.toggle('active', !state.gameOver && player === 'A');
     ui.panelB.classList.toggle('active', !state.gameOver && player === 'B');
     ui.roundLabel.textContent = `ROUND ${Math.min(state.round, MAX_ROUNDS)} / ${MAX_ROUNDS}`;
-    ui.turnLabel.textContent = state.gameOver ? 'GAME OVER' : `PLAYER ${player} のターン`;
+    ui.turnLabel.textContent = state.gameOver ? 'GAME OVER' : (player === COMPUTER_PLAYER ? 'COMPUTER のターン' : 'PLAYER A のターン');
     ui.movesLeft.textContent = String(MOVES_PER_TURN - state.movesUsed);
-    ui.undoBtn.disabled = state.gameOver || !state.undoStack.length;
-    ui.endTurnBtn.disabled = state.gameOver || state.movesUsed !== MOVES_PER_TURN;
+    ui.undoBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || !state.undoStack.length;
+    ui.endTurnBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || state.movesUsed !== MOVES_PER_TURN;
 
     if (state.gameOver) {
       ui.instruction.textContent = 'ゲーム終了です。';
+    } else if (player === COMPUTER_PLAYER) {
+      ui.instruction.textContent = `COMPUTERが思考中です。残り${MOVES_PER_TURN - state.movesUsed} MOVEです。`;
     } else if (state.movesUsed >= MOVES_PER_TURN) {
       ui.instruction.textContent = '3 MOVE完了。「ターン終了」で現在の線を確定してください。';
     } else if (state.selectedPiece == null) {
-      ui.instruction.textContent = `動かしたいPLAYER ${player}の駒を選んでください。残り${MOVES_PER_TURN - state.movesUsed} MOVEです。`;
+      ui.instruction.textContent = `動かしたいPLAYER Aの駒を選んでください。残り${MOVES_PER_TURN - state.movesUsed} MOVEです。`;
     } else {
-      ui.instruction.textContent = `駒${state.selectedPiece + 1}を選択中。光っている隣接点へ移動できます。`;
+      ui.instruction.textContent = '選択中の駒を、光っている隣接点へ移動できます。';
     }
     renderHistory();
   }
@@ -549,7 +614,7 @@
   ui.endTurnBtn.addEventListener('click', endTurn);
   ui.resetBtn.addEventListener('click', resetGame);
   ui.againBtn.addEventListener('click', resetGame);
-  ui.clearSelectionBtn.addEventListener('click', () => { state.selectedPiece = null; render(); });
+  ui.clearSelectionBtn.addEventListener('click', () => { if (state.current !== COMPUTER_PLAYER) { state.selectedPiece = null; render(); } });
   window.addEventListener('resize', resizeCanvas);
 
   resetGame();
