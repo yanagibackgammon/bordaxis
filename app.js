@@ -9,9 +9,9 @@
   const COMPUTER_MOVE_DELAY = 420;
 
   const COLORS = {
-    A: '#ff5d72',
+    A: '#32c770',
     B: '#37a8ff',
-    AFill: 'rgba(255,93,114,.22)',
+    AFill: 'rgba(50,199,112,.22)',
     BFill: 'rgba(55,168,255,.22)',
     grid: '#344052',
     gridStrong: '#526176',
@@ -26,20 +26,14 @@
   const ui = {
     scoreA: document.getElementById('scoreA'),
     scoreB: document.getElementById('scoreB'),
-    turnsA: document.getElementById('turnsA'),
-    turnsB: document.getElementById('turnsB'),
     panelA: document.getElementById('panelA'),
     panelB: document.getElementById('panelB'),
     roundLabel: document.getElementById('roundLabel'),
-    turnLabel: document.getElementById('turnLabel'),
-    movesLeft: document.getElementById('movesLeft'),
     instruction: document.getElementById('instruction'),
     undoBtn: document.getElementById('undoBtn'),
     endTurnBtn: document.getElementById('endTurnBtn'),
     resetBtn: document.getElementById('resetBtn'),
     againBtn: document.getElementById('againBtn'),
-    clearSelectionBtn: document.getElementById('clearSelectionBtn'),
-    history: document.getElementById('history'),
     winnerOverlay: document.getElementById('winnerOverlay'),
     winnerTitle: document.getElementById('winnerTitle'),
     winnerScore: document.getElementById('winnerScore')
@@ -71,8 +65,7 @@
         }
       },
       turnStartPieces: null,
-      undoStack: [],
-      history: []
+      undoStack: []
     };
   }
 
@@ -341,13 +334,7 @@
     state.players.A.score = territories.A.area;
     state.players.B.score = territories.B.area;
 
-    state.history.push({
-      player,
-      turn: state.turns[player],
-      a: { ...pieces[0] },
-      b: { ...pieces[1] },
-      score: state.players[player].score
-    });
+
 
     if (player === 'B' && state.turns.B >= MAX_ROUNDS) {
       finishGame();
@@ -583,7 +570,7 @@
 
         const target = owner === 'A' ? imgA : imgB;
         const rgb = owner === 'A'
-          ? { r: 255, g: 93, b: 114 }
+          ? { r: 50, g: 199, b: 112 }
           : { r: 55, g: 168, b: 255 };
 
         for (const p of componentBoardPixels) {
@@ -643,28 +630,14 @@
     ui.winnerOverlay.classList.remove('hidden');
   }
 
-  function renderHistory() {
-    if (!state.history.length) {
-      ui.history.innerHTML = '<div class="history-entry">まだ確定した線はありません。</div>';
-      return;
-    }
-    ui.history.innerHTML = state.history.map(h =>
-      `<div class="history-entry"><strong>${h.player} T${h.turn}</strong> ` +
-      `(${h.a.x},${h.a.y}) ↔ (${h.b.x},${h.b.y})　score ${h.score.toFixed(2)}</div>`
-    ).join('');
-  }
 
   function updateUI() {
     const player = state.current;
     ui.scoreA.textContent = state.players.A.score.toFixed(2);
     ui.scoreB.textContent = state.players.B.score.toFixed(2);
-    ui.turnsA.textContent = `${state.turns.A} / ${MAX_ROUNDS} turns`;
-    ui.turnsB.textContent = `${state.turns.B} / ${MAX_ROUNDS} turns`;
     ui.panelA.classList.toggle('active', !state.gameOver && player === 'A');
     ui.panelB.classList.toggle('active', !state.gameOver && player === 'B');
     ui.roundLabel.textContent = `ROUND ${Math.min(state.round, MAX_ROUNDS)} / ${MAX_ROUNDS}`;
-    ui.turnLabel.textContent = state.gameOver ? 'GAME OVER' : (player === COMPUTER_PLAYER ? 'COMPUTER のターン' : 'PLAYER A のターン');
-    ui.movesLeft.textContent = String(MOVES_PER_TURN - state.movesUsed);
     ui.undoBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || !state.undoStack.length;
     ui.endTurnBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || state.movesUsed !== MOVES_PER_TURN;
 
@@ -673,13 +646,12 @@
     } else if (player === COMPUTER_PLAYER) {
       ui.instruction.textContent = `COMPUTERが思考中です。残り${MOVES_PER_TURN - state.movesUsed} MOVEです。`;
     } else if (state.movesUsed >= MOVES_PER_TURN) {
-      ui.instruction.textContent = '3 MOVE完了。「ターン終了」で現在の線を確定してください。';
+      ui.instruction.textContent = '3 MOVE完了。「ムーブ確定」で現在の線を確定してください。';
     } else if (state.selectedPiece == null) {
       ui.instruction.textContent = `動かしたいPLAYER Aの駒を選んでください。残り${MOVES_PER_TURN - state.movesUsed} MOVEです。`;
     } else {
       ui.instruction.textContent = '選択中の駒を、光っている隣接点へ移動できます。';
     }
-    renderHistory();
   }
 
   function render() {
@@ -692,7 +664,6 @@
   ui.endTurnBtn.addEventListener('click', endTurn);
   ui.resetBtn.addEventListener('click', resetGame);
   ui.againBtn.addEventListener('click', resetGame);
-  ui.clearSelectionBtn.addEventListener('click', () => { if (state.current !== COMPUTER_PLAYER) { state.selectedPiece = null; render(); } });
   window.addEventListener('resize', resizeCanvas);
 
   resetGame();

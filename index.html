@@ -9,10 +9,7 @@
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div>
-        <div class="eyebrow">2 PLAYER STRATEGY GAME / PROTOTYPE</div>
-        <h1>BORDAXIS</h1>
-      </div>
+      <h1>BORDAXIS</h1>
       <button id="resetBtn" class="ghost danger">最初から</button>
     </header>
 
@@ -20,19 +17,16 @@
       <article id="panelA" class="player-card player-a active">
         <div class="player-label"><span class="dot"></span>PLAYER A</div>
         <div class="score"><span id="scoreA">0.00</span><small> pt²</small></div>
-        <div id="turnsA" class="turn-meta">0 / 50 turns</div>
       </article>
 
       <div class="center-status">
         <div id="roundLabel" class="round">ROUND 1 / 50</div>
-        <div id="turnLabel" class="turn-label">PLAYER A のターン</div>
-        <div class="moves"><span id="movesLeft">3</span> MOVE LEFT</div>
+        <button id="endTurnBtn" class="primary confirm-btn" disabled>ムーブ確定</button>
       </div>
 
       <article id="panelB" class="player-card player-b">
         <div class="player-label"><span class="dot"></span>COMPUTER</div>
         <div class="score"><span id="scoreB">0.00</span><small> pt²</small></div>
-        <div id="turnsB" class="turn-meta">0 / 50 turns</div>
       </article>
     </section>
 
@@ -50,42 +44,15 @@
       </div>
 
       <aside class="side-panel">
-        <section class="rule-card">
-          <h2>この試作版の仮ルール</h2>
-          <ol>
-            <li>フィールドは1辺10の正方形。移動できる点は外周のみで、四隅を重複しない合計40点。</li>
-            <li>各プレイヤーは2駒。PLAYER A（赤）は左上・右下、COMPUTER（青）は左下・右上に初期配置。</li>
-            <li>1 MOVEで、選択した駒をフィールド外周の隣接点へ1つ移動。内側へは移動不可。</li>
-            <li>相手の駒がいる点にも移動でき、その点を通って先へ進むこともできる。同じプレイヤーの2駒は同じ点には置けない。</li>
-            <li>1ターンに必ず3 MOVE。1駒だけを3回動かしてもよい。</li>
-            <li>3 MOVE後に「ターン終了」で、その時点の2駒を結ぶ線を確定。</li>
-            <li>両者の確定線で分割された各領域について、境界を構成するすべての線が同じプレイヤーの線だけなら、その面積がそのプレイヤーの得点となる。赤と青の線が境界に混在する領域は得点にならない。</li>
-            <li>得点となる陣地だけをプレイヤーカラーで塗りつぶす。</li>
-            <li>全50ラウンド＝PLAYER AとCOMPUTERが各50ターン、合計100ターンで終了。</li>
-                      <li>暫定仕様としてPLAYER A（赤）は人間、COMPUTER（青）は自動操作。</li>
-          </ol>
-        </section>
-
         <section class="controls-card">
           <h2>操作</h2>
           <p id="instruction">動かしたいPLAYER Aの駒を選んでください。</p>
-          <div class="button-row">
-            <button id="undoBtn" class="ghost" disabled>1手戻す</button>
-            <button id="endTurnBtn" class="primary" disabled>ターン終了</button>
-          </div>
+          <button id="undoBtn" class="ghost undo-btn" disabled>1手戻す</button>
           <div class="legend">
             <div><span class="legend-line a"></span>Aの確定線</div>
-            <div><span class="legend-line b"></span>Bの確定線</div>
+            <div><span class="legend-line b"></span>COMPUTERの確定線</div>
             <div><span class="legend-line current"></span>現在の線</div>
           </div>
-        </section>
-
-        <section class="log-card">
-          <div class="log-head">
-            <h2>履歴</h2>
-            <button id="clearSelectionBtn" class="text-btn">選択解除</button>
-          </div>
-          <div id="history" class="history"></div>
         </section>
       </aside>
     </section>
