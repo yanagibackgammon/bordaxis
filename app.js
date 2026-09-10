@@ -5,7 +5,6 @@
   const POINTS = GRID + 1;
   const MOVES_PER_TURN = 3;
   const MAX_ROUNDS = 50; // 50ラウンド = 各プレイヤー50ターン = 合計100ターン
-  const ALLOW_DIAGONAL = false;
 
   const COLORS = {
     A: '#ff5d72',
@@ -125,33 +124,29 @@
     drawPieces('B');
   }
 
+  function isPerimeterPoint(p) {
+    return p.x === 0 || p.x === GRID || p.y === 0 || p.y === GRID;
+  }
+
   function drawGrid() {
     ctx.save();
-    for (let i = 0; i <= GRID; i++) {
-      const x = view.pad + i * view.cell;
-      const y = view.pad + i * view.cell;
-      ctx.strokeStyle = (i === 0 || i === GRID) ? COLORS.gridStrong : COLORS.grid;
-      ctx.lineWidth = (i === 0 || i === GRID) ? 1.6 : 1;
-      ctx.beginPath();
-      ctx.moveTo(x, view.pad);
-      ctx.lineTo(x, view.pad + GRID * view.cell);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(view.pad, y);
-      ctx.lineTo(view.pad + GRID * view.cell, y);
-      ctx.stroke();
-    }
 
-    // dots
+    // The field has only 40 playable points: 11 on each side, with corners shared.
+    ctx.strokeStyle = COLORS.gridStrong;
+    ctx.lineWidth = 1.8;
+    ctx.strokeRect(view.pad, view.pad, GRID * view.cell, GRID * view.cell);
+
     for (let x = 0; x <= GRID; x++) {
       for (let y = 0; y <= GRID; y++) {
+        if (!isPerimeterPoint({ x, y })) continue;
         const p = ptToPx({ x, y });
         ctx.fillStyle = '#728096';
         ctx.beginPath();
-        ctx.arc(p.x, p.y, Math.max(1.7, view.cell * .032), 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, Math.max(2.2, view.cell * .04), 0, Math.PI * 2);
         ctx.fill();
       }
     }
+
     ctx.restore();
   }
 
@@ -211,11 +206,6 @@
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = '#081018';
-      ctx.font = `900 ${Math.max(10, r * .95)}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(idx + 1), c.x, c.y + .5);
       ctx.restore();
     });
   }
@@ -223,16 +213,21 @@
   function legalTargets(pieceIndex) {
     const p = state.players[state.current].pieces[pieceIndex];
     const out = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        if (dx === 0 && dy === 0) continue;
-        if (!ALLOW_DIAGONAL && dx !== 0 && dy !== 0) continue;
-        const q = { x: p.x + dx, y: p.y + dy };
-        if (q.x < 0 || q.x > GRID || q.y < 0 || q.y > GRID) continue;
-        if (isOccupied(q)) continue;
-        out.push(q);
-      }
+    const steps = [
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 }
+    ];
+
+    for (const step of steps) {
+      const q = { x: p.x + step.x, y: p.y + step.y };
+      if (q.x < 0 || q.x > GRID || q.y < 0 || q.y > GRID) continue;
+      if (!isPerimeterPoint(q)) continue;
+      if (isOccupied(q)) continue;
+      out.push(q);
     }
+
     return out;
   }
 
