@@ -10,7 +10,13 @@
   <main class="app-shell">
     <header class="topbar">
       <h1>BORDAXIS</h1>
-      <button id="resetBtn" class="ghost danger">最初から</button>
+      <div class="topbar-right">
+        <div class="creator">
+          <span>Created by</span>
+          <a href="https://yanagibackgammon.github.io/" target="_blank" rel="noopener noreferrer">YANAGI Backgammon</a>
+        </div>
+        <button id="resetBtn" class="ghost danger reset-btn">最初から</button>
+      </div>
     </header>
 
     <section class="scoreboard">
@@ -21,7 +27,9 @@
 
       <div class="center-status">
         <div class="round-word">ROUND</div>
-        <div id="roundLabel" class="round-value">1 / 50</div>
+        <div class="round-value">
+          <span id="roundLabel">1</span><span class="round-total"> / 50</span>
+        </div>
       </div>
 
       <article id="panelB" class="player-card player-b">
