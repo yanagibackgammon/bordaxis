@@ -47,7 +47,7 @@
 
   let view = { size: 760, pad: 56, cell: 64.8 };
   let state;
-  let territoryCache = { A: null, B: null };
+  let territoryCache = null;
   let computerTimer = null;
 
   function initialState() {
@@ -85,7 +85,7 @@
       clearTimeout(computerTimer);
       computerTimer = null;
     }
-    territoryCache = { A: null, B: null };
+    territoryCache = null;
     state = initialState();
     state.turnStartPieces = clonePieces(state.players.A.pieces);
     ui.winnerOverlay.classList.add('hidden');
@@ -334,9 +334,12 @@
       b: { ...pieces[1] },
       initial: false
     });
-    territoryCache[player] = null;
+    territoryCache = null;
     state.turns[player] += 1;
-    state.players[player].score = calculateArea(player);
+
+    const territories = computeTerritories();
+    state.players.A.score = territories.A.area;
+    state.players.B.score = territories.B.area;
 
     state.history.push({
       player,
@@ -417,126 +420,201 @@
     }, COMPUTER_MOVE_DELAY);
   }
 
-  // Rasterize only that player's confirmed line network onto an expanded plane.
-  // The field boundary is NOT treated as a wall, so only loops made by the
-  // player's own lines become territory.
-  function computeTerritory(player) {
-    if (territoryCache[player]) return territoryCache[player];
+  // Build the planar regions from BOTH players' confirmed lines.
+  // A region scores only when every line on that region's boundary belongs
+  // to one player. If the boundary contains both red and blue lines, it is neutral.
+  // The outer square itself is not a scoring boundary.
+  function computeTerritories() {
+    if (territoryCache) return territoryCache;
 
     const SCALE = 48;
     const MARGIN = SCALE * 2;
     const BOARD_PX = GRID * SCALE;
     const W = BOARD_PX + MARGIN * 2 + 1;
     const H = W;
-
-    const oc = document.createElement('canvas');
-    oc.width = W;
-    oc.height = H;
-    const ox = oc.getContext('2d', { willReadFrequently: true });
-    ox.clearRect(0, 0, W, H);
-    ox.strokeStyle = '#000';
-    ox.lineWidth = 2.2;
-    ox.lineCap = 'round';
-    ox.lineJoin = 'round';
+    const N = W * H;
 
     const map = p => ({
       x: MARGIN + p.x * SCALE,
       y: MARGIN + (GRID - p.y) * SCALE
     });
 
-    for (const seg of state.players[player].segments) {
-      const a = map(seg.a);
-      const b = map(seg.b);
-      ox.beginPath();
-      ox.moveTo(a.x, a.y);
-      ox.lineTo(b.x, b.y);
-      ox.stroke();
+    function rasterizePlayer(player) {
+      const oc = document.createElement('canvas');
+      oc.width = W;
+      oc.height = H;
+      const ox = oc.getContext('2d', { willReadFrequently: true });
+      ox.clearRect(0, 0, W, H);
+      ox.strokeStyle = '#000';
+      ox.lineWidth = 3;
+      ox.lineCap = 'round';
+      ox.lineJoin = 'round';
+
+      for (const seg of state.players[player].segments) {
+        const a = map(seg.a);
+        const b = map(seg.b);
+        ox.beginPath();
+        ox.moveTo(a.x, a.y);
+        ox.lineTo(b.x, b.y);
+        ox.stroke();
+      }
+
+      const img = ox.getImageData(0, 0, W, H).data;
+      const mask = new Uint8Array(N);
+      for (let i = 0, p = 0; i < img.length; i += 4, p++) {
+        if (img[i + 3] > 16) mask[p] = 1;
+      }
+      return mask;
     }
 
-    const img = ox.getImageData(0, 0, W, H).data;
-    const blocked = new Uint8Array(W * H);
-    for (let i = 0, p = 0; i < img.length; i += 4, p++) {
-      if (img[i + 3] > 16) blocked[p] = 1;
+    const blockedA = rasterizePlayer('A');
+    const blockedB = rasterizePlayer('B');
+    const blocked = new Uint8Array(N);
+    for (let i = 0; i < N; i++) {
+      blocked[i] = blockedA[i] || blockedB[i] ? 1 : 0;
     }
 
-    const seen = new Uint8Array(W * H);
-    const qx = new Int32Array(W * H);
-    const qy = new Int32Array(W * H);
+    // First mark every free pixel connected to the outside.
+    const outside = new Uint8Array(N);
+    const q = new Int32Array(N);
     let head = 0;
     let tail = 0;
 
-    const push = (x, y) => {
+    const pushOutside = (x, y) => {
       if (x < 0 || y < 0 || x >= W || y >= H) return;
       const idx = y * W + x;
-      if (blocked[idx] || seen[idx]) return;
-      seen[idx] = 1;
-      qx[tail] = x;
-      qy[tail] = y;
-      tail++;
+      if (blocked[idx] || outside[idx]) return;
+      outside[idx] = 1;
+      q[tail++] = idx;
     };
 
     for (let x = 0; x < W; x++) {
-      push(x, 0);
-      push(x, H - 1);
+      pushOutside(x, 0);
+      pushOutside(x, H - 1);
     }
     for (let y = 1; y < H - 1; y++) {
-      push(0, y);
-      push(W - 1, y);
+      pushOutside(0, y);
+      pushOutside(W - 1, y);
     }
 
     while (head < tail) {
-      const x = qx[head];
-      const y = qy[head];
-      head++;
-      push(x + 1, y);
-      push(x - 1, y);
-      push(x, y + 1);
-      push(x, y - 1);
+      const idx = q[head++];
+      const x = idx % W;
+      const y = (idx / W) | 0;
+      pushOutside(x + 1, y);
+      pushOutside(x - 1, y);
+      pushOutside(x, y + 1);
+      pushOutside(x, y - 1);
     }
 
-    const mask = document.createElement('canvas');
-    mask.width = BOARD_PX;
-    mask.height = BOARD_PX;
-    const mx = mask.getContext('2d');
-    const maskImage = mx.createImageData(BOARD_PX, BOARD_PX);
+    const claimed = new Uint8Array(N);
+    const maskA = document.createElement('canvas');
+    const maskB = document.createElement('canvas');
+    maskA.width = maskB.width = BOARD_PX;
+    maskA.height = maskB.height = BOARD_PX;
+    const mxA = maskA.getContext('2d');
+    const mxB = maskB.getContext('2d');
+    const imgA = mxA.createImageData(BOARD_PX, BOARD_PX);
+    const imgB = mxB.createImageData(BOARD_PX, BOARD_PX);
 
-    const rgb = player === 'A'
-      ? { r: 255, g: 93, b: 114 }
-      : { r: 55, g: 168, b: 255 };
+    let areaPixelsA = 0;
+    let areaPixelsB = 0;
 
-    let enclosed = 0;
+    const inBoardPixel = (x, y) =>
+      x >= MARGIN && x < MARGIN + BOARD_PX &&
+      y >= MARGIN && y < MARGIN + BOARD_PX;
+
+    // Every remaining free component is one atomic enclosed region.
     for (let by = 0; by < BOARD_PX; by++) {
-      const y = MARGIN + by;
       for (let bx = 0; bx < BOARD_PX; bx++) {
-        const x = MARGIN + bx;
-        const srcIdx = y * W + x;
-        if (blocked[srcIdx] || seen[srcIdx]) continue;
+        const sx = MARGIN + bx;
+        const sy = MARGIN + by;
+        const startIdx = sy * W + sx;
+        if (blocked[startIdx] || outside[startIdx] || claimed[startIdx]) continue;
 
-        enclosed++;
-        const dstIdx = (by * BOARD_PX + bx) * 4;
-        maskImage.data[dstIdx] = rgb.r;
-        maskImage.data[dstIdx + 1] = rgb.g;
-        maskImage.data[dstIdx + 2] = rgb.b;
-        maskImage.data[dstIdx + 3] = 58;
+        head = 0;
+        tail = 0;
+        q[tail++] = startIdx;
+        claimed[startIdx] = 1;
+
+        const componentBoardPixels = [];
+        let touchesA = false;
+        let touchesB = false;
+
+        while (head < tail) {
+          const idx = q[head++];
+          const x = idx % W;
+          const y = (idx / W) | 0;
+
+          if (inBoardPixel(x, y)) {
+            componentBoardPixels.push((y - MARGIN) * BOARD_PX + (x - MARGIN));
+          }
+
+          const neighbors = [
+            idx + 1,
+            idx - 1,
+            idx + W,
+            idx - W
+          ];
+
+          for (const nidx of neighbors) {
+            if (nidx < 0 || nidx >= N) continue;
+
+            if (blocked[nidx]) {
+              if (blockedA[nidx]) touchesA = true;
+              if (blockedB[nidx]) touchesB = true;
+              continue;
+            }
+
+            if (outside[nidx] || claimed[nidx]) continue;
+            claimed[nidx] = 1;
+            q[tail++] = nidx;
+          }
+        }
+
+        // All boundary segments must belong to exactly one player.
+        const owner = touchesA && !touchesB
+          ? 'A'
+          : touchesB && !touchesA
+            ? 'B'
+            : null;
+
+        if (!owner || componentBoardPixels.length === 0) continue;
+
+        const target = owner === 'A' ? imgA : imgB;
+        const rgb = owner === 'A'
+          ? { r: 255, g: 93, b: 114 }
+          : { r: 55, g: 168, b: 255 };
+
+        for (const p of componentBoardPixels) {
+          const dst = p * 4;
+          target.data[dst] = rgb.r;
+          target.data[dst + 1] = rgb.g;
+          target.data[dst + 2] = rgb.b;
+          target.data[dst + 3] = 58;
+        }
+
+        if (owner === 'A') areaPixelsA += componentBoardPixels.length;
+        else areaPixelsB += componentBoardPixels.length;
       }
     }
 
-    mx.putImageData(maskImage, 0, 0);
+    mxA.putImageData(imgA, 0, 0);
+    mxB.putImageData(imgB, 0, 0);
 
-    const result = {
-      area: enclosed / (SCALE * SCALE),
-      mask
+    territoryCache = {
+      A: { area: areaPixelsA / (SCALE * SCALE), mask: maskA },
+      B: { area: areaPixelsB / (SCALE * SCALE), mask: maskB }
     };
-    territoryCache[player] = result;
-    return result;
+    return territoryCache;
   }
 
   function calculateArea(player) {
-    return computeTerritory(player).area;
+    return computeTerritories()[player].area;
   }
 
   function drawTerritory(player) {
-    const territory = computeTerritory(player);
+    const territory = computeTerritories()[player];
     if (territory.area <= 0) return;
 
     ctx.save();
