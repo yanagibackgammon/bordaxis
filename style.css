@@ -359,17 +359,46 @@ button:not(:disabled):hover {
   .topbar { margin-bottom: 7px; }
 
   .scoreboard {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(76px, .56fr) minmax(0, 1fr);
+    gap: 6px;
   }
 
   .center-status {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    min-height: 38px;
+    min-height: 0;
+    padding: 6px 5px;
+    gap: 3px;
   }
 
-  .player-card { padding: 9px 10px; }
-  .score { font-size: 30px; }
+  .player-card {
+    padding: 8px 8px;
+  }
+
+  .player-label {
+    gap: 5px;
+    font-size: 10px;
+    letter-spacing: .03em;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .score {
+    font-size: clamp(24px, 7vw, 30px);
+  }
+
+  .score small {
+    font-size: 10px;
+  }
+
+  .round-word {
+    font-size: 9px;
+  }
+
+  .round-value {
+    font-size: clamp(19px, 5.8vw, 25px);
+  }
 
   .topbar,
   .scoreboard,
