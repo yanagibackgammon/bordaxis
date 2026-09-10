@@ -356,7 +356,7 @@ button:not(:disabled):hover {
 
 @media (max-width: 680px) {
   .app-shell {
-    width: min(100% - 12px, 820px);
+    width: min(100% - 16px, 820px);
     padding-top: 8px;
   }
 

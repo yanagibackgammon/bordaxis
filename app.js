@@ -1,8 +1,11 @@
 (() => {
   'use strict';
 
-  const GRID = 10;
+  const FIELD_SIZE = 100;
+  const POINT_INTERVAL = 10;
+  const GRID = FIELD_SIZE / POINT_INTERVAL;
   const POINTS = GRID + 1;
+  const AREA_SCALE = POINT_INTERVAL * POINT_INTERVAL;
   const MOVES_PER_TURN = 3;
   const MAX_ROUNDS = 50; // 50ラウンド = 各プレイヤー50ターン = 合計100ターン
   const COMPUTER_PLAYER = 'B';
@@ -147,7 +150,6 @@
     drawSegments('A');
     drawSegments('B');
     drawCurrentLine();
-    drawMoveHints();
 
     if (state.current === 'A') {
       drawPieces('B');
@@ -156,6 +158,9 @@
       drawPieces('A');
       drawPieces('B');
     }
+
+    // Candidate markers are drawn last so they remain visible over an opponent piece.
+    drawMoveHints();
   }
 
   function isPerimeterPoint(p) {
@@ -308,9 +313,16 @@
       ctx.arc(p.x, p.y, Math.max(8, view.cell * .13), 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.globalAlpha = .92;
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = state.selectedPiece == null ? 2.4 : 3;
+      ctx.stroke();
+
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = COLORS.A;
-      ctx.lineWidth = state.selectedPiece == null ? 1.3 : 1.8;
+      ctx.lineWidth = state.selectedPiece == null ? 1.2 : 1.5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(10, view.cell * .16), 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.restore();
@@ -622,8 +634,8 @@
     }
 
     return {
-      A: areaA / (SCALE * SCALE),
-      B: areaB / (SCALE * SCALE)
+      A: Math.round((areaA / (SCALE * SCALE)) * AREA_SCALE),
+      B: Math.round((areaB / (SCALE * SCALE)) * AREA_SCALE)
     };
   }
 
@@ -925,8 +937,14 @@
     mxB.putImageData(imgB, 0, 0);
 
     territoryCache = {
-      A: { area: areaPixelsA / (SCALE * SCALE), mask: maskA },
-      B: { area: areaPixelsB / (SCALE * SCALE), mask: maskB }
+      A: {
+        area: Math.round((areaPixelsA / (SCALE * SCALE)) * AREA_SCALE),
+        mask: maskA
+      },
+      B: {
+        area: Math.round((areaPixelsB / (SCALE * SCALE)) * AREA_SCALE),
+        mask: maskB
+      }
     };
     return territoryCache;
   }
@@ -961,15 +979,15 @@
     } else {
       ui.winnerTitle.textContent = a > b ? 'PLAYER A WIN' : 'COMPUTER WIN';
     }
-    ui.winnerScore.textContent = `A ${a.toFixed(2)} － ${b.toFixed(2)} COMPUTER`;
+    ui.winnerScore.textContent = `A ${Math.round(a)} － ${Math.round(b)} COMPUTER`;
     ui.winnerOverlay.classList.remove('hidden');
   }
 
 
   function updateUI() {
     const player = state.current;
-    ui.scoreA.textContent = state.players.A.score.toFixed(2);
-    ui.scoreB.textContent = state.players.B.score.toFixed(2);
+    ui.scoreA.textContent = String(Math.round(state.players.A.score));
+    ui.scoreB.textContent = String(Math.round(state.players.B.score));
     ui.panelA.classList.toggle('active', !state.gameOver && player === 'A');
     ui.panelB.classList.toggle('active', !state.gameOver && player === 'B');
     ui.roundLabel.textContent = `${Math.min(state.round, MAX_ROUNDS)}`;
