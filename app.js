@@ -29,7 +29,6 @@
     panelA: document.getElementById('panelA'),
     panelB: document.getElementById('panelB'),
     roundLabel: document.getElementById('roundLabel'),
-    instruction: document.getElementById('instruction'),
     undoBtn: document.getElementById('undoBtn'),
     endTurnBtn: document.getElementById('endTurnBtn'),
     resetBtn: document.getElementById('resetBtn'),
@@ -43,6 +42,7 @@
   let state;
   let territoryCache = null;
   let computerTimer = null;
+  let computerPlan = null;
 
   function initialState() {
     return {
@@ -78,6 +78,7 @@
       clearTimeout(computerTimer);
       computerTimer = null;
     }
+    computerPlan = null;
     territoryCache = null;
     state = initialState();
     state.turnStartPieces = clonePieces(state.players.A.pieces);
@@ -216,8 +217,8 @@
     });
   }
 
-  function legalTargets(pieceIndex) {
-    const p = state.players[state.current].pieces[pieceIndex];
+  function legalTargetsForPieces(pieces, pieceIndex) {
+    const p = pieces[pieceIndex];
     const out = [];
     const steps = [
       { x: 1, y: 0 },
@@ -230,37 +231,62 @@
       const q = { x: p.x + step.x, y: p.y + step.y };
       if (q.x < 0 || q.x > GRID || q.y < 0 || q.y > GRID) continue;
       if (!isPerimeterPoint(q)) continue;
-      if (isOccupiedByOwnOther(q, pieceIndex)) continue;
+
+      const occupiedByOwnOther = pieces.some((own, idx) =>
+        idx !== pieceIndex && own.x === q.x && own.y === q.y
+      );
+      if (occupiedByOwnOther) continue;
+
       out.push(q);
     }
 
     return out;
   }
 
+  function legalTargets(pieceIndex) {
+    return legalTargetsForPieces(state.players[state.current].pieces, pieceIndex);
+  }
+
   function drawMoveHints() {
-    if (state.gameOver || state.selectedPiece == null || state.movesUsed >= MOVES_PER_TURN) return;
-    const targets = legalTargets(state.selectedPiece);
+    if (
+      state.gameOver ||
+      state.current === COMPUTER_PLAYER ||
+      state.movesUsed >= MOVES_PER_TURN
+    ) return;
+
+    let targets = [];
+
+    if (state.selectedPiece == null) {
+      // At the start of a human turn, show every legal destination for both pieces.
+      const seen = new Set();
+      for (let pieceIndex = 0; pieceIndex < state.players.A.pieces.length; pieceIndex++) {
+        for (const target of legalTargets(pieceIndex)) {
+          const key = `${target.x},${target.y}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            targets.push(target);
+          }
+        }
+      }
+    } else {
+      targets = legalTargets(state.selectedPiece);
+    }
+
     ctx.save();
     for (const t of targets) {
       const p = ptToPx(t);
-      ctx.fillStyle = COLORS[state.current];
-      ctx.globalAlpha = .28;
+      ctx.fillStyle = COLORS.A;
+      ctx.globalAlpha = state.selectedPiece == null ? .24 : .34;
       ctx.beginPath();
       ctx.arc(p.x, p.y, Math.max(8, view.cell * .13), 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = .9;
-      ctx.strokeStyle = COLORS[state.current];
-      ctx.lineWidth = 1.5;
+
+      ctx.globalAlpha = .92;
+      ctx.strokeStyle = COLORS.A;
+      ctx.lineWidth = state.selectedPiece == null ? 1.3 : 1.8;
       ctx.stroke();
     }
     ctx.restore();
-  }
-
-  function isOccupiedByOwnOther(q, movingPieceIndex) {
-    const own = state.players[state.current].pieces;
-    return own.some((p, idx) =>
-      idx !== movingPieceIndex && p.x === q.x && p.y === q.y
-    );
   }
 
   function boardPointFromEvent(ev) {
@@ -348,6 +374,7 @@
     state.selectedPiece = null;
     state.undoStack = [];
     state.turnStartPieces = clonePieces(state.players[state.current].pieces);
+    computerPlan = null;
     render();
     scheduleComputerTurn();
   }
@@ -361,6 +388,255 @@
     computerTimer = setTimeout(computerStep, COMPUTER_MOVE_DELAY);
   }
 
+  function segmentLength(seg) {
+    return Math.hypot(seg.b.x - seg.a.x, seg.b.y - seg.a.y);
+  }
+
+  function orientation(a, b, c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  }
+
+  function properIntersection(s1, s2) {
+    const o1 = orientation(s1.a, s1.b, s2.a);
+    const o2 = orientation(s1.a, s1.b, s2.b);
+    const o3 = orientation(s2.a, s2.b, s1.a);
+    const o4 = orientation(s2.a, s2.b, s1.b);
+    return ((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+           ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0));
+  }
+
+  function sameSegment(s1, s2) {
+    const sameDirection =
+      s1.a.x === s2.a.x && s1.a.y === s2.a.y &&
+      s1.b.x === s2.b.x && s1.b.y === s2.b.y;
+    const oppositeDirection =
+      s1.a.x === s2.b.x && s1.a.y === s2.b.y &&
+      s1.b.x === s2.a.x && s1.b.y === s2.a.y;
+    return sameDirection || oppositeDirection;
+  }
+
+  // Fast territory calculation used only by the CPU while comparing candidates.
+  // It follows the same mixed-boundary rule as the visible scoring, but at lower
+  // raster resolution so every reachable 3-MOVE result can be evaluated quickly.
+  function computeTerritoryAreasFast(extraBSegment) {
+    const SCALE = 14;
+    const MARGIN = SCALE * 2;
+    const BOARD_PX = GRID * SCALE;
+    const W = BOARD_PX + MARGIN * 2 + 1;
+    const H = W;
+    const N = W * H;
+
+    const map = p => ({
+      x: MARGIN + p.x * SCALE,
+      y: MARGIN + (GRID - p.y) * SCALE
+    });
+
+    function rasterizePlayer(player) {
+      const oc = document.createElement('canvas');
+      oc.width = W;
+      oc.height = H;
+      const ox = oc.getContext('2d', { willReadFrequently: true });
+      ox.clearRect(0, 0, W, H);
+      ox.strokeStyle = '#000';
+      ox.lineWidth = 1.8;
+      ox.lineCap = 'round';
+      ox.lineJoin = 'round';
+
+      const segments = player === 'B' && extraBSegment
+        ? [...state.players.B.segments, extraBSegment]
+        : state.players[player].segments;
+
+      for (const seg of segments) {
+        const a = map(seg.a);
+        const b = map(seg.b);
+        ox.beginPath();
+        ox.moveTo(a.x, a.y);
+        ox.lineTo(b.x, b.y);
+        ox.stroke();
+      }
+
+      const img = ox.getImageData(0, 0, W, H).data;
+      const mask = new Uint8Array(N);
+      for (let i = 0, p = 0; i < img.length; i += 4, p++) {
+        if (img[i + 3] > 16) mask[p] = 1;
+      }
+      return mask;
+    }
+
+    const blockedA = rasterizePlayer('A');
+    const blockedB = rasterizePlayer('B');
+    const blocked = new Uint8Array(N);
+    for (let i = 0; i < N; i++) {
+      blocked[i] = blockedA[i] || blockedB[i] ? 1 : 0;
+    }
+
+    const outside = new Uint8Array(N);
+    const queue = new Int32Array(N);
+    let head = 0;
+    let tail = 0;
+
+    const pushOutside = (x, y) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return;
+      const idx = y * W + x;
+      if (blocked[idx] || outside[idx]) return;
+      outside[idx] = 1;
+      queue[tail++] = idx;
+    };
+
+    for (let x = 0; x < W; x++) {
+      pushOutside(x, 0);
+      pushOutside(x, H - 1);
+    }
+    for (let y = 1; y < H - 1; y++) {
+      pushOutside(0, y);
+      pushOutside(W - 1, y);
+    }
+
+    while (head < tail) {
+      const idx = queue[head++];
+      const x = idx % W;
+      const y = (idx / W) | 0;
+      pushOutside(x + 1, y);
+      pushOutside(x - 1, y);
+      pushOutside(x, y + 1);
+      pushOutside(x, y - 1);
+    }
+
+    const claimed = new Uint8Array(N);
+    let areaA = 0;
+    let areaB = 0;
+
+    const inBoardPixel = (x, y) =>
+      x >= MARGIN && x < MARGIN + BOARD_PX &&
+      y >= MARGIN && y < MARGIN + BOARD_PX;
+
+    for (let by = 0; by < BOARD_PX; by++) {
+      for (let bx = 0; bx < BOARD_PX; bx++) {
+        const sx = MARGIN + bx;
+        const sy = MARGIN + by;
+        const startIdx = sy * W + sx;
+        if (blocked[startIdx] || outside[startIdx] || claimed[startIdx]) continue;
+
+        head = 0;
+        tail = 0;
+        queue[tail++] = startIdx;
+        claimed[startIdx] = 1;
+
+        let componentBoardPixels = 0;
+        let touchesA = false;
+        let touchesB = false;
+
+        while (head < tail) {
+          const idx = queue[head++];
+          const x = idx % W;
+          const y = (idx / W) | 0;
+          if (inBoardPixel(x, y)) componentBoardPixels++;
+
+          const neighbors = [idx + 1, idx - 1, idx + W, idx - W];
+          for (const nidx of neighbors) {
+            if (nidx < 0 || nidx >= N) continue;
+
+            if (blocked[nidx]) {
+              if (blockedA[nidx]) touchesA = true;
+              if (blockedB[nidx]) touchesB = true;
+              continue;
+            }
+
+            if (outside[nidx] || claimed[nidx]) continue;
+            claimed[nidx] = 1;
+            queue[tail++] = nidx;
+          }
+        }
+
+        if (touchesA && !touchesB) areaA += componentBoardPixels;
+        else if (touchesB && !touchesA) areaB += componentBoardPixels;
+      }
+    }
+
+    return {
+      A: areaA / (SCALE * SCALE),
+      B: areaB / (SCALE * SCALE)
+    };
+  }
+
+  function evaluateComputerFinalPieces(pieces) {
+    const candidate = {
+      a: { ...pieces[0] },
+      b: { ...pieces[1] },
+      initial: false
+    };
+
+    const areas = computeTerritoryAreasFast(candidate);
+
+    // Immediate board advantage is by far the most important factor.
+    let value = (areas.B - areas.A) * 10000;
+
+    // When no territory is created yet, prefer useful long lines and lines that
+    // intersect our earlier lines, because those are more likely to close loops.
+    value += segmentLength(candidate) * 8;
+
+    let ownCrossings = 0;
+    let opponentCrossings = 0;
+    let duplicate = false;
+
+    for (const seg of state.players.B.segments) {
+      if (sameSegment(candidate, seg)) duplicate = true;
+      if (properIntersection(candidate, seg)) ownCrossings++;
+    }
+    for (const seg of state.players.A.segments) {
+      if (properIntersection(candidate, seg)) opponentCrossings++;
+    }
+
+    value += ownCrossings * 35;
+    value += opponentCrossings * 8;
+    if (duplicate) value -= 120;
+
+    return value;
+  }
+
+  function buildComputerPlan() {
+    const startPieces = clonePieces(state.players.B.pieces);
+    const candidates = new Map();
+
+    function search(pieces, depth, plan) {
+      if (depth === MOVES_PER_TURN) {
+        const key = `${pieces[0].x},${pieces[0].y}|${pieces[1].x},${pieces[1].y}`;
+        if (!candidates.has(key)) {
+          candidates.set(key, {
+            pieces: clonePieces(pieces),
+            plan: plan.map(move => ({
+              pieceIndex: move.pieceIndex,
+              target: { ...move.target }
+            }))
+          });
+        }
+        return;
+      }
+
+      for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex++) {
+        for (const target of legalTargetsForPieces(pieces, pieceIndex)) {
+          const next = clonePieces(pieces);
+          next[pieceIndex] = { ...target };
+          search(next, depth + 1, [...plan, { pieceIndex, target }]);
+        }
+      }
+    }
+
+    search(startPieces, 0, []);
+
+    let best = null;
+    for (const candidate of candidates.values()) {
+      const score = evaluateComputerFinalPieces(candidate.pieces);
+      // Tiny random tie-break keeps repeated equal positions from looking robotic.
+      const tieBrokenScore = score + Math.random() * 0.001;
+      if (!best || tieBrokenScore > best.score) {
+        best = { score: tieBrokenScore, plan: candidate.plan };
+      }
+    }
+
+    return best ? best.plan : [];
+  }
+
   function computerStep() {
     computerTimer = null;
     if (!state || state.gameOver || state.current !== COMPUTER_PLAYER) return;
@@ -370,29 +646,20 @@
       return;
     }
 
-    const choices = [];
-    for (let pieceIndex = 0; pieceIndex < state.players.B.pieces.length; pieceIndex++) {
-      for (const target of legalTargets(pieceIndex)) {
-        choices.push({ pieceIndex, target });
-      }
+    if (!computerPlan) {
+      computerPlan = buildComputerPlan();
     }
 
-    if (!choices.length) {
-      // Normally unreachable on the perimeter, but avoid locking the game.
+    const choice = computerPlan[state.movesUsed];
+    if (!choice) {
       state.movesUsed = MOVES_PER_TURN;
       render();
       computerTimer = setTimeout(() => endTurn(), COMPUTER_MOVE_DELAY);
       return;
     }
 
-    const choice = choices[Math.floor(Math.random() * choices.length)];
     const own = state.players.B.pieces;
     state.selectedPiece = choice.pieceIndex;
-    state.undoStack.push({
-      pieces: clonePieces(own),
-      movesUsed: state.movesUsed,
-      selectedPiece: state.selectedPiece
-    });
     own[choice.pieceIndex] = { ...choice.target };
     state.movesUsed += 1;
 
@@ -624,9 +891,9 @@
     if (Math.abs(a - b) < 0.005) {
       ui.winnerTitle.textContent = 'DRAW';
     } else {
-      ui.winnerTitle.textContent = a > b ? 'PLAYER A WIN' : 'PLAYER B WIN';
+      ui.winnerTitle.textContent = a > b ? 'PLAYER A WIN' : 'COMPUTER WIN';
     }
-    ui.winnerScore.textContent = `A ${a.toFixed(2)} － ${b.toFixed(2)} B`;
+    ui.winnerScore.textContent = `A ${a.toFixed(2)} － ${b.toFixed(2)} COMPUTER`;
     ui.winnerOverlay.classList.remove('hidden');
   }
 
@@ -640,18 +907,6 @@
     ui.roundLabel.textContent = `ROUND ${Math.min(state.round, MAX_ROUNDS)} / ${MAX_ROUNDS}`;
     ui.undoBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || !state.undoStack.length;
     ui.endTurnBtn.disabled = state.gameOver || player === COMPUTER_PLAYER || state.movesUsed !== MOVES_PER_TURN;
-
-    if (state.gameOver) {
-      ui.instruction.textContent = 'ゲーム終了です。';
-    } else if (player === COMPUTER_PLAYER) {
-      ui.instruction.textContent = `COMPUTERが思考中です。残り${MOVES_PER_TURN - state.movesUsed} MOVEです。`;
-    } else if (state.movesUsed >= MOVES_PER_TURN) {
-      ui.instruction.textContent = '3 MOVE完了。「ムーブ確定」で現在の線を確定してください。';
-    } else if (state.selectedPiece == null) {
-      ui.instruction.textContent = `動かしたいPLAYER Aの駒を選んでください。残り${MOVES_PER_TURN - state.movesUsed} MOVEです。`;
-    } else {
-      ui.instruction.textContent = '選択中の駒を、光っている隣接点へ移動できます。';
-    }
   }
 
   function render() {

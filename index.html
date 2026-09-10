@@ -21,7 +21,6 @@
 
       <div class="center-status">
         <div id="roundLabel" class="round">ROUND 1 / 50</div>
-        <button id="endTurnBtn" class="primary confirm-btn" disabled>ムーブ確定</button>
       </div>
 
       <article id="panelB" class="player-card player-b">
@@ -30,7 +29,7 @@
       </article>
     </section>
 
-    <section class="game-layout">
+    <section class="game-area">
       <div class="board-wrap">
         <canvas id="board" width="760" height="760" aria-label="ゲーム盤"></canvas>
         <div id="winnerOverlay" class="winner-overlay hidden">
@@ -43,18 +42,10 @@
         </div>
       </div>
 
-      <aside class="side-panel">
-        <section class="controls-card">
-          <h2>操作</h2>
-          <p id="instruction">動かしたいPLAYER Aの駒を選んでください。</p>
-          <button id="undoBtn" class="ghost undo-btn" disabled>1手戻す</button>
-          <div class="legend">
-            <div><span class="legend-line a"></span>Aの確定線</div>
-            <div><span class="legend-line b"></span>COMPUTERの確定線</div>
-            <div><span class="legend-line current"></span>現在の線</div>
-          </div>
-        </section>
-      </aside>
+      <div class="move-buttons">
+        <button id="endTurnBtn" class="primary" disabled>ムーブ確定</button>
+        <button id="undoBtn" class="ghost" disabled>1手戻す</button>
+      </div>
     </section>
   </main>
 
