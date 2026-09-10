@@ -126,19 +126,23 @@ h1 {
   background: currentColor;
 }
 
+.player-a,
+.player-b {
+  text-align: center;
+}
+
 .player-a { color: var(--a); }
-.player-b { color: var(--b); text-align: right; }
+.player-b { color: var(--b); }
 
 .player-label {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   font-size: 12px;
   font-weight: 900;
   letter-spacing: .06em;
 }
-
-.player-b .player-label { justify-content: flex-end; }
 
 .dot {
   width: 9px;
