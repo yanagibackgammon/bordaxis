@@ -50,10 +50,11 @@ h1 {
 }
 
 .scoreboard {
+  width: min(100%, calc(100dvh - 205px));
+  margin: 0 auto 8px;
   display: grid;
   grid-template-columns: 1fr minmax(135px, .55fr) 1fr;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .player-card,
@@ -173,11 +174,11 @@ h1 {
 }
 
 .move-buttons {
-  width: 100%;
+  width: min(100%, calc(100dvh - 205px));
+  margin: 0 auto 8px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 button {
@@ -319,6 +320,8 @@ button:not(:disabled):hover {
   .player-card { padding: 9px 10px; }
   .score { font-size: 30px; }
 
+  .scoreboard,
+  .move-buttons,
   .board-wrap {
     width: 100%;
   }
