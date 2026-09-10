@@ -316,21 +316,56 @@
       return;
     }
 
-    if (state.selectedPiece == null) return;
-    const legal = legalTargets(state.selectedPiece).some(p => p.x === q.x && p.y === q.y);
-    if (!legal) return;
+    // A candidate point can be clicked directly even when no piece is selected.
+    // If both pieces can reach the same point, choose the move that leaves the
+    // longer current line; ties are resolved by the lower piece index.
+    let movingPieceIndex = state.selectedPiece;
+
+    if (movingPieceIndex == null) {
+      const candidates = [];
+
+      for (let pieceIndex = 0; pieceIndex < own.length; pieceIndex++) {
+        const canReach = legalTargets(pieceIndex).some(
+          p => p.x === q.x && p.y === q.y
+        );
+        if (!canReach) continue;
+
+        const simulated = clonePieces(own);
+        simulated[pieceIndex] = { ...q };
+        const lineLength = Math.hypot(
+          simulated[1].x - simulated[0].x,
+          simulated[1].y - simulated[0].y
+        );
+
+        candidates.push({ pieceIndex, lineLength });
+      }
+
+      if (!candidates.length) return;
+
+      candidates.sort((a, b) =>
+        b.lineLength - a.lineLength || a.pieceIndex - b.pieceIndex
+      );
+      movingPieceIndex = candidates[0].pieceIndex;
+    } else {
+      const legal = legalTargets(movingPieceIndex).some(
+        p => p.x === q.x && p.y === q.y
+      );
+      if (!legal) return;
+    }
 
     state.undoStack.push({
       pieces: clonePieces(own),
       movesUsed: state.movesUsed,
       selectedPiece: state.selectedPiece
     });
-    own[state.selectedPiece] = q;
+
+    own[movingPieceIndex] = { ...q };
     state.movesUsed += 1;
 
-    if (state.movesUsed >= MOVES_PER_TURN) {
-      state.selectedPiece = null;
-    }
+    // After every move, return to the all-candidates state so the next
+    // destination can also be clicked directly without selecting a piece first.
+    state.selectedPiece = null;
+
     render();
   }
 
