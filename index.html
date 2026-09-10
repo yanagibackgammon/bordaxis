@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>BORDAXIS</title>
-  <link rel="stylesheet" href="style.css?v=21" />
+  <link rel="stylesheet" href="style.css?v=25" />
 </head>
 <body>
   <main class="app-shell">
@@ -19,7 +19,15 @@
           <a href="https://yanagibackgammon.github.io/" target="_blank" rel="noopener noreferrer">YANAGI Backgammon</a>
         </div>
       </div>
-      <button id="resetBtn" class="ghost danger reset-btn">再スタート</button>
+      <div class="header-actions">
+        <button id="helpBtn" class="ghost header-icon-btn" aria-label="ルール説明">？</button>
+        <button id="resetBtn" class="ghost danger reset-btn" aria-label="再スタート" title="再スタート">
+          <svg class="restart-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 11a8 8 0 1 0-2.34 5.66" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </header>
 
     <section class="scoreboard">
@@ -61,6 +69,31 @@
     </section>
   </main>
 
-  <script src="app.js?v=21"></script>
+  <div id="rulesModal" class="rules-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="rules-dialog">
+      <div class="rules-head">
+        <h2 id="rulesTitle">BORDAXIS ルール</h2>
+        <button id="rulesCloseBtn" class="ghost header-icon-btn" aria-label="閉じる">×</button>
+      </div>
+
+      <div class="rules-body">
+        <p>1辺100の正方形フィールドの外周40点を使う、2人対戦型の陣取りゲームです。</p>
+        <ol>
+          <li>各プレイヤーは2つの駒を持ち、駒は常に外周の点上にあります。</li>
+          <li>PLAYERは左上・右下、COMPUTERは左下・右上から開始し、初期の線はそれぞれ対角線です。</li>
+          <li>1ターンにつき合計3回、駒を隣接する外周点へ移動できます。1つの駒を3回動かしても、2つの駒に分けても構いません。</li>
+          <li>相手の駒がいる点にも移動でき、その点を通過できます。</li>
+          <li>3回の移動後に「ムーブ確定」を押すと、2つの駒を結ぶ線が新しく引かれます。</li>
+          <li>過去に引いた線はすべて盤面に残ります。</li>
+          <li>両者の線で分割された領域のうち、境界を構成するすべての線が同じプレイヤーの線だけで囲まれている領域が、そのプレイヤーの陣地です。</li>
+          <li>境界にPLAYERとCOMPUTER両方の線が含まれる領域は、どちらの得点にもなりません。</li>
+          <li>陣地の面積がそのままスコアになります。</li>
+          <li>全50ラウンド、2人合計100ターン終了時にスコアの高い方が勝ちです。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=25"></script>
 </body>
 </html>
