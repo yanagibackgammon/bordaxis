@@ -224,7 +224,7 @@ h1 {
   touch-action: none;
   cursor: pointer;
   transform: scale(1);
-  transform-origin: 50% 50%;
+  transform-origin: 0 0;
   will-change: transform;
 }
 
@@ -417,5 +417,50 @@ button:not(:disabled):hover {
 
   .creator a {
     font-size: 10px;
+  }
+}
+
+@media (max-width: 680px) {
+  html,
+  body {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+
+  body {
+    position: fixed;
+    inset: 0;
+  }
+
+  .app-shell {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .board-wrap {
+    touch-action: none;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 680px) {
+  .topbar,
+  .scoreboard,
+  .move-buttons,
+  .player-card,
+  .center-status,
+  button,
+  .title-cluster,
+  .creator {
+    touch-action: none !important;
+  }
+
+  .board-wrap,
+  .board-wrap * {
+    touch-action: none !important;
   }
 }

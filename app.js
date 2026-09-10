@@ -1016,6 +1016,40 @@
   }
 
   // Entire page stays fixed on SP. Only this field consumes touch gestures.
+  function allTouchesInsideField(touches) {
+    if (!touches || touches.length === 0) return false;
+
+    for (const touch of touches) {
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!el || !el.closest('.board-wrap')) return false;
+    }
+    return true;
+  }
+
+  // Safari/iOS can still perform page zoom even with user-scalable=no.
+  // Block every multi-touch gesture unless ALL fingers are inside the square field.
+  document.addEventListener('touchstart', ev => {
+    if (ev.touches.length >= 2 && !allTouchesInsideField(ev.touches)) {
+      ev.preventDefault();
+    }
+  }, { passive: false, capture: true });
+
+  document.addEventListener('touchmove', ev => {
+    if (ev.touches.length >= 2 && !allTouchesInsideField(ev.touches)) {
+      ev.preventDefault();
+    }
+  }, { passive: false, capture: true });
+
+  // Safari-specific gesture events.
+  for (const eventName of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(eventName, ev => {
+      const target = ev.target instanceof Element ? ev.target : null;
+      if (!target || !target.closest('.board-wrap')) {
+        ev.preventDefault();
+      }
+    }, { passive: false, capture: true });
+  }
+
   // Prevent native double-tap zoom on mobile. Field zoom is handled only
   // by the custom pinch implementation below.
   let lastTouchEndAt = 0;
