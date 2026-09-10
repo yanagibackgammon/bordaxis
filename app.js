@@ -977,9 +977,8 @@
     if (Math.abs(a - b) < 0.005) {
       ui.winnerTitle.textContent = 'DRAW';
     } else {
-      ui.winnerTitle.textContent = a > b ? 'PLAYER A WIN' : 'COMPUTER WIN';
+      ui.winnerTitle.textContent = a > b ? 'PLAYER WIN' : 'COMPUTER WIN';
     }
-    ui.winnerScore.textContent = `A ${Math.round(a)} － ${Math.round(b)} COMPUTER`;
     ui.winnerOverlay.classList.remove('hidden');
   }
 
