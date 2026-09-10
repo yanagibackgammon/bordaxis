@@ -9,6 +9,8 @@
   const COLORS = {
     A: '#ff5d72',
     B: '#37a8ff',
+    AFill: 'rgba(255,93,114,.22)',
+    BFill: 'rgba(55,168,255,.22)',
     grid: '#344052',
     gridStrong: '#526176',
     pieceStroke: '#f7fbff',
@@ -43,6 +45,7 @@
 
   let view = { size: 760, pad: 56, cell: 64.8 };
   let state;
+  let territoryCache = { A: null, B: null };
 
   function initialState() {
     return {
@@ -75,6 +78,7 @@
   }
 
   function resetGame() {
+    territoryCache = { A: null, B: null };
     state = initialState();
     state.turnStartPieces = clonePieces(state.players.A.pieces);
     ui.winnerOverlay.classList.add('hidden');
@@ -115,6 +119,8 @@
     ctx.fillStyle = '#101721';
     ctx.fillRect(view.pad, view.pad, view.cell * GRID, view.cell * GRID);
 
+    drawTerritory('A');
+    drawTerritory('B');
     drawGrid();
     drawSegments('A');
     drawSegments('B');
@@ -224,7 +230,7 @@
       const q = { x: p.x + step.x, y: p.y + step.y };
       if (q.x < 0 || q.x > GRID || q.y < 0 || q.y > GRID) continue;
       if (!isPerimeterPoint(q)) continue;
-      if (isOccupied(q)) continue;
+      if (isOccupiedByOwnOther(q, pieceIndex)) continue;
       out.push(q);
     }
 
@@ -250,13 +256,11 @@
     ctx.restore();
   }
 
-  function isOccupied(q) {
-    for (const player of ['A', 'B']) {
-      for (const p of state.players[player].pieces) {
-        if (p.x === q.x && p.y === q.y) return true;
-      }
-    }
-    return false;
+  function isOccupiedByOwnOther(q, movingPieceIndex) {
+    const own = state.players[state.current].pieces;
+    return own.some((p, idx) =>
+      idx !== movingPieceIndex && p.x === q.x && p.y === q.y
+    );
   }
 
   function boardPointFromEvent(ev) {
@@ -323,6 +327,7 @@
       b: { ...pieces[1] },
       initial: false
     });
+    territoryCache[player] = null;
     state.turns[player] += 1;
     state.players[player].score = calculateArea(player);
 
@@ -349,14 +354,18 @@
     render();
   }
 
-  // Approximate enclosed area by rasterizing only that player's line network
-  // onto an expanded plane. The field boundary is NOT treated as a wall,
-  // so only loops made by the player's own lines count.
-  function calculateArea(player) {
-    const SCALE = 48;           // pixels per board unit
-    const MARGIN = SCALE * 2;   // lets flood-fill go around the board edge
-    const W = GRID * SCALE + MARGIN * 2 + 1;
+  // Rasterize only that player's confirmed line network onto an expanded plane.
+  // The field boundary is NOT treated as a wall, so only loops made by the
+  // player's own lines become territory.
+  function computeTerritory(player) {
+    if (territoryCache[player]) return territoryCache[player];
+
+    const SCALE = 48;
+    const MARGIN = SCALE * 2;
+    const BOARD_PX = GRID * SCALE;
+    const W = BOARD_PX + MARGIN * 2 + 1;
     const H = W;
+
     const oc = document.createElement('canvas');
     oc.width = W;
     oc.height = H;
@@ -373,7 +382,8 @@
     });
 
     for (const seg of state.players[player].segments) {
-      const a = map(seg.a), b = map(seg.b);
+      const a = map(seg.a);
+      const b = map(seg.b);
       ox.beginPath();
       ox.moveTo(a.x, a.y);
       ox.lineTo(b.x, b.y);
@@ -389,7 +399,8 @@
     const seen = new Uint8Array(W * H);
     const qx = new Int32Array(W * H);
     const qy = new Int32Array(W * H);
-    let head = 0, tail = 0;
+    let head = 0;
+    let tail = 0;
 
     const push = (x, y) => {
       if (x < 0 || y < 0 || x >= W || y >= H) return;
@@ -401,28 +412,80 @@
       tail++;
     };
 
-    for (let x = 0; x < W; x++) { push(x, 0); push(x, H - 1); }
-    for (let y = 1; y < H - 1; y++) { push(0, y); push(W - 1, y); }
-
-    while (head < tail) {
-      const x = qx[head], y = qy[head];
-      head++;
-      push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1);
+    for (let x = 0; x < W; x++) {
+      push(x, 0);
+      push(x, H - 1);
+    }
+    for (let y = 1; y < H - 1; y++) {
+      push(0, y);
+      push(W - 1, y);
     }
 
-    const x0 = MARGIN;
-    const y0 = MARGIN;
-    const x1 = MARGIN + GRID * SCALE;
-    const y1 = y0 + GRID * SCALE;
+    while (head < tail) {
+      const x = qx[head];
+      const y = qy[head];
+      head++;
+      push(x + 1, y);
+      push(x - 1, y);
+      push(x, y + 1);
+      push(x, y - 1);
+    }
+
+    const mask = document.createElement('canvas');
+    mask.width = BOARD_PX;
+    mask.height = BOARD_PX;
+    const mx = mask.getContext('2d');
+    const maskImage = mx.createImageData(BOARD_PX, BOARD_PX);
+
+    const rgb = player === 'A'
+      ? { r: 255, g: 93, b: 114 }
+      : { r: 55, g: 168, b: 255 };
+
     let enclosed = 0;
-    for (let y = y0; y < y1; y++) {
-      let idx = y * W + x0;
-      for (let x = x0; x < x1; x++, idx++) {
-        if (!blocked[idx] && !seen[idx]) enclosed++;
+    for (let by = 0; by < BOARD_PX; by++) {
+      const y = MARGIN + by;
+      for (let bx = 0; bx < BOARD_PX; bx++) {
+        const x = MARGIN + bx;
+        const srcIdx = y * W + x;
+        if (blocked[srcIdx] || seen[srcIdx]) continue;
+
+        enclosed++;
+        const dstIdx = (by * BOARD_PX + bx) * 4;
+        maskImage.data[dstIdx] = rgb.r;
+        maskImage.data[dstIdx + 1] = rgb.g;
+        maskImage.data[dstIdx + 2] = rgb.b;
+        maskImage.data[dstIdx + 3] = 58;
       }
     }
 
-    return enclosed / (SCALE * SCALE);
+    mx.putImageData(maskImage, 0, 0);
+
+    const result = {
+      area: enclosed / (SCALE * SCALE),
+      mask
+    };
+    territoryCache[player] = result;
+    return result;
+  }
+
+  function calculateArea(player) {
+    return computeTerritory(player).area;
+  }
+
+  function drawTerritory(player) {
+    const territory = computeTerritory(player);
+    if (territory.area <= 0) return;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(
+      territory.mask,
+      view.pad,
+      view.pad,
+      view.cell * GRID,
+      view.cell * GRID
+    );
+    ctx.restore();
   }
 
   function finishGame() {
