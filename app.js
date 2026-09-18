@@ -12,10 +12,10 @@
   const COMPUTER_MOVE_DELAY = 420;
 
   const COLORS = {
-    A: '#32c770',
-    B: '#37a8ff',
-    AFill: 'rgba(50,199,112,.22)',
-    BFill: 'rgba(55,168,255,.22)',
+    A: '#4be786',
+    B: '#54bfff',
+    AFill: 'rgba(75,231,134,.28)',
+    BFill: 'rgba(84,191,255,.28)',
     grid: '#344052',
     gridStrong: '#526176',
     pieceStroke: '#f7fbff',
@@ -281,6 +281,68 @@
     return legalTargetsForPieces(state.players[state.current].pieces, pieceIndex);
   }
 
+  const PERIMETER_POINTS = (() => {
+    const points = [];
+    for (let x = 0; x <= GRID; x++) points.push({ x, y: GRID });
+    for (let y = GRID - 1; y >= 0; y--) points.push({ x: GRID, y });
+    for (let x = GRID - 1; x >= 0; x--) points.push({ x, y: 0 });
+    for (let y = 1; y < GRID; y++) points.push({ x: 0, y });
+    return points;
+  })();
+
+  const PERIMETER_INDEX = new Map(
+    PERIMETER_POINTS.map((p, index) => [`${p.x},${p.y}`, index])
+  );
+
+  function samePoint(a, b) {
+    return a.x === b.x && a.y === b.y;
+  }
+
+  function reachableTargetsForPieces(pieces, pieceIndex, maxSteps) {
+    const start = pieces[pieceIndex];
+    const startIndex = PERIMETER_INDEX.get(`${start.x},${start.y}`);
+    if (startIndex == null || maxSteps <= 0) return [];
+
+    const ownOther = pieces[1 - pieceIndex];
+    const count = PERIMETER_POINTS.length;
+    const results = [];
+
+    for (const direction of [-1, 1]) {
+      for (let distance = 1; distance <= maxSteps; distance++) {
+        const idx = (startIndex + direction * distance + count * 2) % count;
+        const target = PERIMETER_POINTS[idx];
+
+        // A direct 2/3-point choice is equivalent to consecutive 1-MOVE steps.
+        // The moving piece may pass an opponent, but not its own other piece.
+        if (samePoint(target, ownOther)) break;
+
+        results.push({
+          x: target.x,
+          y: target.y,
+          cost: distance,
+          pieceIndex
+        });
+      }
+    }
+
+    return results;
+  }
+
+  function humanMoveCandidates(pieceIndex = null) {
+    const remaining = MOVES_PER_TURN - state.movesUsed;
+    const pieces = state.players.A.pieces;
+    if (remaining <= 0) return [];
+
+    if (pieceIndex != null) {
+      return reachableTargetsForPieces(pieces, pieceIndex, remaining);
+    }
+
+    return [
+      ...reachableTargetsForPieces(pieces, 0, remaining),
+      ...reachableTargetsForPieces(pieces, 1, remaining)
+    ];
+  }
+
   function drawMoveHints() {
     if (
       state.gameOver ||
@@ -288,43 +350,39 @@
       state.movesUsed >= MOVES_PER_TURN
     ) return;
 
-    let targets = [];
+    const rawTargets = humanMoveCandidates(state.selectedPiece);
+    const targetsByPoint = new Map();
 
-    if (state.selectedPiece == null) {
-      // At the start of a human turn, show every legal destination for both pieces.
-      const seen = new Set();
-      for (let pieceIndex = 0; pieceIndex < state.players.A.pieces.length; pieceIndex++) {
-        for (const target of legalTargets(pieceIndex)) {
-          const key = `${target.x},${target.y}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            targets.push(target);
-          }
-        }
+    for (const target of rawTargets) {
+      const key = `${target.x},${target.y}`;
+      const existing = targetsByPoint.get(key);
+      if (!existing || target.cost < existing.cost) {
+        targetsByPoint.set(key, target);
       }
-    } else {
-      targets = legalTargets(state.selectedPiece);
     }
 
     ctx.save();
-    for (const t of targets) {
+    for (const t of targetsByPoint.values()) {
       const p = ptToPx(t);
+      const remaining = MOVES_PER_TURN - state.movesUsed;
+      const distanceRatio = remaining > 0 ? t.cost / remaining : 1;
+      const radius = Math.max(8, view.cell * (.16 - distanceRatio * .025));
+
       ctx.fillStyle = COLORS.A;
-      ctx.globalAlpha = state.selectedPiece == null ? .24 : .34;
+      ctx.globalAlpha = .22 + (remaining - t.cost) * .035;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(8, view.cell * .13), 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.globalAlpha = 1;
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = state.selectedPiece == null ? 2.4 : 3;
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      ctx.globalAlpha = 1;
       ctx.strokeStyle = COLORS.A;
-      ctx.lineWidth = state.selectedPiece == null ? 1.2 : 1.5;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(10, view.cell * .16), 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, radius + 2.2, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.restore();
@@ -345,12 +403,17 @@
 
   function handleBoardPointer(ev) {
     if (suppressBoardTap) return;
-    if (state.gameOver || state.current === COMPUTER_PLAYER || state.movesUsed >= MOVES_PER_TURN) return;
+    if (
+      state.gameOver ||
+      state.current === COMPUTER_PLAYER ||
+      state.movesUsed >= MOVES_PER_TURN
+    ) return;
+
     const q = boardPointFromEvent(ev);
     if (!q) return;
 
-    // click own piece -> select
-    const own = state.players[state.current].pieces;
+    const own = state.players.A.pieces;
+
     const clickedOwnIndex = own.findIndex(p => p.x === q.x && p.y === q.y);
     if (clickedOwnIndex !== -1) {
       state.selectedPiece = clickedOwnIndex;
@@ -358,42 +421,28 @@
       return;
     }
 
-    // A candidate point can be clicked directly even when no piece is selected.
-    // If both pieces can reach the same point, choose the move that leaves the
-    // longer current line; ties are resolved by the lower piece index.
-    let movingPieceIndex = state.selectedPiece;
+    let candidates = humanMoveCandidates(state.selectedPiece).filter(
+      candidate => candidate.x === q.x && candidate.y === q.y
+    );
+    if (!candidates.length) return;
 
-    if (movingPieceIndex == null) {
-      const candidates = [];
-
-      for (let pieceIndex = 0; pieceIndex < own.length; pieceIndex++) {
-        const canReach = legalTargets(pieceIndex).some(
-          p => p.x === q.x && p.y === q.y
-        );
-        if (!canReach) continue;
-
-        const simulated = clonePieces(own);
-        simulated[pieceIndex] = { ...q };
-        const lineLength = Math.hypot(
-          simulated[1].x - simulated[0].x,
-          simulated[1].y - simulated[0].y
-        );
-
-        candidates.push({ pieceIndex, lineLength });
-      }
-
-      if (!candidates.length) return;
-
-      candidates.sort((a, b) =>
-        b.lineLength - a.lineLength || a.pieceIndex - b.pieceIndex
+    candidates = candidates.map(candidate => {
+      const simulated = clonePieces(own);
+      simulated[candidate.pieceIndex] = { x: candidate.x, y: candidate.y };
+      const lineLength = Math.hypot(
+        simulated[1].x - simulated[0].x,
+        simulated[1].y - simulated[0].y
       );
-      movingPieceIndex = candidates[0].pieceIndex;
-    } else {
-      const legal = legalTargets(movingPieceIndex).some(
-        p => p.x === q.x && p.y === q.y
-      );
-      if (!legal) return;
-    }
+      return { ...candidate, lineLength };
+    });
+
+    candidates.sort((a, b) =>
+      b.lineLength - a.lineLength ||
+      a.cost - b.cost ||
+      a.pieceIndex - b.pieceIndex
+    );
+
+    const choice = candidates[0];
 
     state.undoStack.push({
       pieces: clonePieces(own),
@@ -401,11 +450,8 @@
       selectedPiece: state.selectedPiece
     });
 
-    own[movingPieceIndex] = { ...q };
-    state.movesUsed += 1;
-
-    // After every move, return to the all-candidates state so the next
-    // destination can also be clicked directly without selecting a piece first.
+    own[choice.pieceIndex] = { x: choice.x, y: choice.y };
+    state.movesUsed += choice.cost;
     state.selectedPiece = null;
 
     render();
@@ -919,8 +965,8 @@
 
         const target = owner === 'A' ? imgA : imgB;
         const rgb = owner === 'A'
-          ? { r: 50, g: 199, b: 112 }
-          : { r: 55, g: 168, b: 255 };
+          ? { r: 75, g: 231, b: 134 }
+          : { r: 84, g: 191, b: 255 };
 
         for (const p of componentBoardPixels) {
           const dst = p * 4;
@@ -976,11 +1022,20 @@
     state.selectedPiece = null;
     const a = state.players.A.score;
     const b = state.players.B.score;
+    const winnerCard = ui.winnerOverlay.querySelector('.winner-card');
+    winnerCard.classList.remove('result-player', 'result-computer', 'result-draw');
+
     if (Math.abs(a - b) < 0.005) {
       ui.winnerTitle.textContent = 'DRAW';
+      winnerCard.classList.add('result-draw');
+    } else if (a > b) {
+      ui.winnerTitle.textContent = 'PLAYER WIN';
+      winnerCard.classList.add('result-player');
     } else {
-      ui.winnerTitle.textContent = a > b ? 'PLAYER WIN' : 'COMPUTER WIN';
+      ui.winnerTitle.textContent = 'COMPUTER WIN';
+      winnerCard.classList.add('result-computer');
     }
+
     ui.winnerOverlay.classList.remove('hidden');
   }
 

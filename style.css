@@ -4,8 +4,8 @@
   --line: #2a3241;
   --text: #f3f6fb;
   --muted: #929caf;
-  --a: #32c770;
-  --b: #37a8ff;
+  --a: #4be786;
+  --b: #54bfff;
 }
 
 * { box-sizing: border-box; }
@@ -639,4 +639,28 @@ button:not(:disabled):hover {
     overscroll-behavior: contain !important;
     -webkit-overflow-scrolling: touch;
   }
+}
+
+
+/* v27: brighter winner feedback */
+.winner-card.result-player {
+  border-color: var(--a);
+  box-shadow: 0 24px 80px rgba(0,0,0,.5), 0 0 30px rgba(75,231,134,.22);
+}
+
+.winner-card.result-player #winnerTitle {
+  color: var(--a);
+}
+
+.winner-card.result-computer {
+  border-color: var(--b);
+  box-shadow: 0 24px 80px rgba(0,0,0,.5), 0 0 30px rgba(84,191,255,.22);
+}
+
+.winner-card.result-computer #winnerTitle {
+  color: var(--b);
+}
+
+.winner-card.result-draw #winnerTitle {
+  color: #f3f6fb;
 }
